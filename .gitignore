@@ -1,0 +1,39 @@
+cat > .gitignore <<'EOF'
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Claude local instructions
+CLAUDE.local.md
+
+# Data
+data/private/
+data/local/
+
+# Secrets
+*.pem
+*.key
+
+#Claude
+.claude/
+
+# Logs
+*.log
+EOF

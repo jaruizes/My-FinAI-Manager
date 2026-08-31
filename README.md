@@ -66,12 +66,15 @@ My-FinAI-Manager follows a human-governed development model.
 The project's product intent, architecture, engineering standards, and development governance are defined independently from any particular AI coding agent or Spec-Driven Development framework.
 
 ```text
-Human Project Definition
+Human-Governed Product Definition
         │
-        ├── Product
-        ├── Architecture
-        ├── Engineering
-        └── Governance
+        └── product/
+            ├── definition/
+            │   ├── global/
+            │   └── features/
+            ├── architecture/
+            ├── engineering/
+            └── governance/
         │
         ▼
 Spec-Driven Development
@@ -92,34 +95,71 @@ This separation allows the project to evolve independently from the tooling used
 
 ```text
 .
+├── implementation/
+│   └── platform/
+│       ├── backend/
+│       ├── contracts/
+│       ├── frontend/
+│       ├── infrastructure/
+│       ├── start.sh
+│       └── stop.sh
+│
 ├── product/
-│   ├── vision.md
-│   ├── context.md
-│   ├── glossary.md
-│   └── feature-definitions/
+│   ├── architecture/
+│   ├── definition/
+│   │   ├── features/
+│   │   └── global/
+│   │       ├── vision.md
+│   │       ├── context.md
+│   │       ├── glossary.md
+│   │       ├── domains.md
+│   │       ├── information-model.md
+│   │       └── business-events.md
+│   ├── engineering/
+│   └── governance/
 │
-├── architecture/
-│   ├── architecture.md
-│   ├── technology-policy.md
-│   ├── architecture-rules.md
-│   ├── diagrams/
-│   └── adrs/
-│
-├── engineering/
-│   ├── development-rules.md
-│   ├── testing-strategy.md
-│   └── definition-of-done.md
-│
-└── governance/
-    ├── sdd-policy.md
-    └── ai-development-policy.md
+└── specs/
 ```
 
-### Product
+The repository deliberately separates three concerns:
 
-Contains the human-authored definition of what My-FinAI-Manager is and what it should do.
+```text
+product/                 Human-governed product, architecture, engineering and governance definition
+specs/                   SDD-derived artifacts for vertical product changes
+implementation/platform/ Current cumulative executable realization of My-FinAI-Manager
+```
 
-Feature definitions represent deliberate human product and domain decisions before they are formalized through the selected SDD framework.
+### Implementation
+
+`implementation/platform/` contains the executable platform produced incrementally by implemented Feature Definitions.
+
+- `frontend/` — user-facing frontend applications.
+- `backend/` — backend deployable components or bounded services. Initial service granularity may be coarse and may evolve only when scaling, maintainability, ownership, runtime, availability, or operational needs justify separation.
+- `contracts/` — externally visible API and event contracts such as OpenAPI and AsyncAPI definitions.
+- `infrastructure/` — local runtime and deployment infrastructure required by the platform.
+- `start.sh` — canonical local entry point for starting the complete platform or development environment.
+- `stop.sh` — canonical local entry point for stopping the complete platform or development environment.
+
+Every implemented Feature Definition extends the existing platform. A feature may modify several implementation areas at once, including frontend, backend, contracts, persistence, infrastructure, and tests.
+
+Feature boundaries provide vertical delivery traceability; implementation folders follow architectural and technical boundaries. They are related, but are not required to be identical.
+
+### Product Definition
+
+`product/definition/` contains the human-authored functional definition of My-FinAI-Manager.
+
+The `global/` directory contains product-wide information that applies across features:
+
+- `vision.md` — product vision, objectives, and Version 1.0.0 direction.
+- `context.md` — actors, system boundaries, external information sources, and functional context.
+- `glossary.md` — shared business vocabulary and relevant standards.
+- `domains.md` — main functional domains, responsibilities, concepts, and information handled.
+- `information-model.md` — business information objects, their main attributes, and relationships.
+- `business-events.md` — significant business events, their effects, and the main business processes they participate in.
+
+The `features/` directory contains human-authored Feature Definitions. Each Feature Definition represents deliberate product and domain intent for a concrete capability before it is formalized through the selected SDD framework.
+
+Global product definitions provide the shared context for all features; Feature Definitions refine that context without silently redefining it.
 
 ### Architecture
 
@@ -134,6 +174,15 @@ Defines how the software must be developed and verified, including testing, code
 ### Governance
 
 Defines how human intent, AI agents, architecture, and the Spec-Driven Development lifecycle interact.
+
+### Specifications
+
+`specs/` contains framework-generated or framework-assisted SDD artifacts associated with Feature Definitions.
+
+These artifacts may include specifications, clarification records, implementation plans, tasks, and checklists.
+
+They are derived from the human-governed definition under `product/` and must remain traceable to the corresponding Feature Definition.
+
 
 ## Architecture Evolution
 
@@ -195,6 +244,6 @@ The project is being built incrementally, with architecture and functionality ev
 
 My-FinAI-Manager is an experimental software engineering and artificial intelligence project.
 
-It does not provide personalized financial advice, does not issue buy/sell/hold recommendations, and does not execute investment transactions.
+It is an advisory decision-support system. It may generate portfolio and investment recommendations, including maintain, increase, reduce, exit, rebalance, or stop-loss suggestions, but it does not autonomously execute investment transactions.
 
-Any financial analysis produced by the system is intended for informational and educational purposes only.
+The Investor remains responsible for all final investment decisions and for any external execution of those decisions.
