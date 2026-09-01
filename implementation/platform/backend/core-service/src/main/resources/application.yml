@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: core-service
+
+  datasource:
+    # Externalized configuration (DR-032). Local defaults point at the Docker Compose PostgreSQL
+    # started by implementation/platform/start.sh, using SYNTHETIC non-production credentials.
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/finai}
+    username: ${SPRING_DATASOURCE_USERNAME:finai}
+    password: ${SPRING_DATASOURCE_PASSWORD:finai_local_dev}
+
+  flyway:
+    enabled: true
+    # Tolerate PostgreSQL not being ready yet at startup (spec edge case; research.md D2).
+    connect-retries: 10
+    connect-retries-interval: 3
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # EN001 exposes only health. No metrics/env/etc.
+        include: health
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+
+# Structured, machine-readable logging (DR-029), via Spring Boot's built-in structured logging
+# in Elastic Common Schema JSON. No custom logback config — a `logback-spring.xml` that includes
+# the plain `console-appender.xml` silently overrides this. For a readable plain console during
+# local debugging, set LOG_STRUCTURED_FORMAT= (empty).
+# Never log secrets, tokens, credentials or sensitive portfolio data (DR-030).
+logging:
+  structured:
+    format:
+      console: ${LOG_STRUCTURED_FORMAT:ecs}

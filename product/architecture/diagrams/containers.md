@@ -2,11 +2,75 @@
 
 ## Purpose
 
-This diagram shows the initial logical architecture of My-FinAI-Manager at container/component-boundary level.
+This document shows the container/component-boundary architecture of My-FinAI-Manager at two levels:
 
-It represents the intended architectural direction, not a mandatory deployment topology.
+1. **Current Realized State** — what actually exists in `implementation/platform/` today.
+2. **Target Architectural Direction** — the intended logical architecture, not a mandatory deployment topology.
 
-A logical container shown here may initially be part of a Modular Monolith and later become independently deployable if justified.
+A logical container shown in the target diagram may initially be part of a Modular Monolith and later become independently deployable if justified.
+
+---
+
+## Current Realized State (after EN001)
+
+Established by `EN001 — Bootstrap Executable Platform` under the topology fixed by
+`ADR-001 — Initial Backend Topology`. This is the **minimum executable platform**; it contains
+**no business capability yet** (Portfolio, Valuation, Risk, etc. are added by Feature Definitions
+starting with `FD001 — Create Investment Portfolio`).
+
+```mermaid
+flowchart TB
+    Investor["Investor"]
+
+    subgraph Client["Client Layer"]
+        Web["Angular Web Frontend
+(frontend/web) — application shell only"]
+    end
+
+    subgraph Backend["Backend — one coarse-grained deployable (ADR-001)"]
+        Core["core-service
+Spring Boot · Hexagonal Architecture convention
+Actuator health endpoint only
+(no business modules yet — added by FD001+)"]
+    end
+
+    subgraph Data["Persistence"]
+        Postgres[("PostgreSQL
+Flyway baseline · no business schema")]
+    end
+
+    subgraph Infra["Local Infrastructure"]
+        Compose["Docker Compose
+infrastructure/local/compose.yaml"]
+    end
+
+    subgraph Contracts["Contracts"]
+        OpenAPI["contracts/openapi/openapi.yaml
+OpenAPI 3.1 skeleton — no operations"]
+    end
+
+    Investor --> Web
+    Web -->|"HTTP — no business operations defined yet"| Core
+    Core -->|"JDBC + Flyway migrations"| Postgres
+    Compose -.->|"provisions locally"| Postgres
+    Core -.->|"implements (future operations)"| OpenAPI
+```
+
+### Not yet realized
+
+The following appear only in the **Target Architectural Direction** below and are intentionally
+absent from the current platform:
+
+- BFF, and a separately deployed External Business API container (the API surface exists only as
+  the empty OpenAPI skeleton location; `core-service` will expose operations directly).
+- Business capability modules (Portfolio, Financial Instruments, Valuation, Risk, Investment
+  Thesis, Market Intelligence, News & Events, Recommendations, Stop-Loss, Portfolio Review).
+- Neo4j, Kafka, external market-data / news / indicator providers, AI / LLM providers.
+- Authentication / authorization, CI/CD, container images, cloud infrastructure.
+
+---
+
+## Target Architectural Direction
 
 ```mermaid
 flowchart TB
@@ -122,6 +186,12 @@ when graph use case is justified"| Neo4j
     Kafka -.-> Review
 ```
 
+The target diagram shows functional capabilities and optional infrastructure as separate logical
+containers for clarity. Per ADR-001, several of these currently coexist (or will be added) as
+**internal modules inside the single `core-service` deployable**, not as separate services.
+Independent deployment of a capability requires a concrete quality-attribute justification and,
+normally, a new ADR.
+
 ## Architectural Interpretation
 
 ### Frontend
@@ -144,9 +214,11 @@ when graph use case is justified"| Neo4j
 
 ### Business Capabilities
 
-The diagram shows functional capabilities, not mandatory microservices.
+The target diagram shows functional capabilities, not mandatory microservices.
 
-They may initially be implemented as modules within a Modular Monolith.
+They are implemented as modules within the single `core-service` deployable (ADR-001, realized by
+EN001). `FD001 — Create Investment Portfolio` adds the first modules (Portfolio Management,
+Financial Instruments) as siblings of the `platform` package convention established by EN001.
 
 Independent deployment is introduced only when justified by:
 
@@ -178,11 +250,19 @@ The business core must not depend directly on provider-specific SDKs or data str
 
 ## Evolution
 
-This diagram must represent the currently approved architecture.
+The **Current Realized State** section must always represent what actually exists in
+`implementation/platform/`. The **Target Architectural Direction** section represents intended
+direction and may show components that do not yet exist.
+
+| Milestone | Effect on this document |
+|---|---|
+| `EN001` (realized) | Established the current state: Angular shell, single `core-service`, PostgreSQL via Docker Compose, empty OpenAPI skeleton, Actuator health. |
+| `FD001` (next) | Adds Portfolio Management + Financial Instruments modules inside `core-service`, the first business schema (Flyway `V2__…`), and the first OpenAPI operation(s). Move those elements from "Not yet realized" into the current-state diagram. |
 
 When a significant architectural decision changes the topology:
 
 1. create or update the corresponding ADR;
 2. update `architecture.md` when necessary;
-3. update this diagram;
-4. keep speculative future components out of the current-state view.
+3. update this diagram (both sections as applicable);
+4. move components between "Not yet realized" and the current-state diagram as they are built;
+5. keep speculative future components in the target section only.

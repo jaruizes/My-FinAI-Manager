@@ -1,0 +1,29 @@
+# EN001 — Local infrastructure for My-FinAI-Manager.
+#
+# Intentionally minimal: PostgreSQL is the ONLY mandatory local dependency (enabler §9, FR-016).
+# No Kafka / Neo4j / Redis / Kubernetes. Started and stopped via
+# implementation/platform/start.sh and stop.sh.
+
+name: my-finai-manager-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: my-finai-manager-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-finai}
+      POSTGRES_USER: ${POSTGRES_USER:-finai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finai_local_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finai} -d ${POSTGRES_DB:-finai}"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+    name: my-finai-manager-postgres-data

@@ -1,0 +1,17 @@
+openapi: 3.1.0
+info:
+  title: My-FinAI-Manager Platform API
+  version: 0.0.0
+  description: >
+    Placeholder external business API contract established by technical enabler EN001 to fix the
+    contract-first location and workflow. EN001 introduces NO operations. Business capabilities
+    (portfolios, positions, valuation, ...) are added by Feature Definitions, starting with
+    FD001 — Create Investment Portfolio, which will add the first paths and schemas here.
+
+    Operational backend/database health is NOT a business capability and is intentionally not
+    modelled here; it is exposed via the Spring Boot Actuator health mechanism at
+    /actuator/health.
+servers:
+  - url: http://localhost:8080
+    description: Local development (started via implementation/platform/start.sh)
+paths: {}
