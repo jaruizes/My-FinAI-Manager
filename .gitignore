@@ -17,8 +17,9 @@ dist/
 .angular/
 out-tsc/
 
-# Platform runtime state (implementation/platform/start.sh)
-implementation/platform/.run/
+# Containerized E2E (implementation/platform/e2e.sh) — diagnostics, never committed (EN002)
+implementation/platform/e2e/test-results/
+implementation/platform/e2e/node_modules/
 
 # Environment
 .env

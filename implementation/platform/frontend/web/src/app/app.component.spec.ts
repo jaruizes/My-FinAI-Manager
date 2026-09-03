@@ -26,12 +26,13 @@ describe('AppComponent (application shell)', () => {
     expect(host.querySelector('app-top-bar')).not.toBeNull();
   });
 
-  it('exposes no product navigation entries yet', () => {
+  it('exposes the Portfolios navigation entry (FD001 — the first product capability)', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     const host: HTMLElement = fixture.nativeElement;
 
-    const navLinks = host.querySelectorAll('app-sidebar a');
-    expect(navLinks.length).toBe(0);
+    const navLinks = Array.from(host.querySelectorAll('app-sidebar a')) as HTMLAnchorElement[];
+    expect(navLinks.map((a) => a.textContent?.trim())).toContain('Portfolios');
+    expect(navLinks.some((a) => a.getAttribute('href') === '/portfolios/new')).toBeTrue();
   });
 });

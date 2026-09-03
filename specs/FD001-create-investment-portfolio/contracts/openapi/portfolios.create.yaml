@@ -1,0 +1,309 @@
+# FD001 — Create Investment Portfolio
+#
+# This fragment defines the single operation FD001 adds to the platform's external business API.
+# During implementation it is MERGED into implementation/platform/contracts/openapi/openapi.yaml
+# (which currently has `paths: {}`). Business language only; no persistence/framework leakage
+# (AR-010, AR-011). Errors follow RFC 9457 `application/problem+json` (AR-012).
+#
+# Dialect: OpenAPI 3.0.3 (see research.md D9 "Implementation note" — the contract-test validator
+# handles 3.0.3 parameter validation reliably; 3.1-only constructs are not needed by FD001).
+
+openapi: 3.0.3
+info:
+  title: My-FinAI-Manager Platform API
+  version: 0.1.0
+  description: >
+    Adds portfolio creation. Listing, viewing, editing, valuation, risk and recommendations are
+    not part of this version (FD001 §3).
+
+paths:
+  /api/portfolios:
+    post:
+      operationId: createPortfolio
+      tags: [Portfolio]
+      summary: Create an investment portfolio with its initial positions
+      description: >
+        Creates one portfolio owned by the current investor, with one or more initial positions,
+        after validating it against the portfolio business rules. The whole portfolio is persisted
+        atomically or not at all.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            A client-generated unique value for one creation attempt. Re-sending the same key
+            (e.g. after a network retry) returns the portfolio already created for it instead of
+            creating a second one.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePortfolioRequest'
+            examples:
+              oneMinimalPosition:
+                summary: Name + one position, no optional acquisition data
+                value:
+                  name: Long-Term Growth
+                  positions:
+                    - ticker: ASML
+                      market: XAMS
+                      quantity: "12"
+                      currency: EUR
+              multiplePositions:
+                summary: Several positions, some with acquisition data
+                value:
+                  name: Dividend Portfolio
+                  positions:
+                    - ticker: ASML
+                      market: XAMS
+                      quantity: "3"
+                      currency: EUR
+                      initialPurchaseDate: "2024-05-14"
+                      averagePurchasePrice: "812.50"
+                    - ticker: MSFT
+                      market: XNAS
+                      quantity: "10"
+                      currency: USD
+      responses:
+        '201':
+          description: Portfolio created.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Resource path of the created portfolio (not yet retrievable in this version).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '200':
+          description: >
+            The `Idempotency-Key` was already used — the portfolio created for it is returned
+            unchanged. No second portfolio is created.
+          headers:
+            Idempotency-Replayed:
+              schema: { type: boolean }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400':
+          description: >
+            The portfolio or one of its positions breaks a business rule. Nothing is persisted.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                missingNameAndDuplicate:
+                  value:
+                    type: /problems/portfolio-validation
+                    title: Portfolio could not be validated
+                    status: 400
+                    detail: The portfolio has 2 problems that need to be fixed.
+                    errors:
+                      - field: name
+                        code: REQUIRED
+                        message: Portfolio name is required.
+                      - field: positions[1]
+                        code: DUPLICATE_INSTRUMENT
+                        message: A position for ASML on XAMS already exists in this portfolio.
+        '415':
+          description: Unsupported media type.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: >
+            The portfolio was valid but could not be saved (transient problem). Nothing was
+            persisted; the client may retry with the same `Idempotency-Key`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                notSaved:
+                  value:
+                    type: /problems/portfolio-not-saved
+                    title: Portfolio could not be saved
+                    status: 503
+                    detail: We could not save your portfolio right now. Please try again.
+
+components:
+  schemas:
+
+    CreatePortfolioRequest:
+      type: object
+      additionalProperties: false
+      required: [name, positions]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Investor-chosen name. Not required to be unique.
+          example: Long-Term Growth
+        positions:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PositionInput'
+
+    PositionInput:
+      type: object
+      additionalProperties: false
+      required: [ticker, market, quantity, currency]
+      properties:
+        ticker:
+          type: string
+          minLength: 1
+          maxLength: 20
+          example: ASML
+        market:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: Market / trading venue. An ISO 10383 MIC is preferred where the investor has one.
+          example: XAMS
+        quantity:
+          type: string
+          pattern: '^-?[0-9]+(\.[0-9]+)?$'
+          description: >
+            Number of securities held, as a decimal string. Business rule: must be greater than
+            zero — a non-positive value is rejected as a ValidationProblem (code NOT_POSITIVE),
+            not a schema error.
+          example: "12"
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          description: ISO 4217 currency code for this position's acquisition information.
+          example: EUR
+        initialPurchaseDate:
+          type: string
+          format: date
+          description: ISO 8601 date. Optional. Must not be in the future.
+          example: "2024-05-14"
+        averagePurchasePrice:
+          type: string
+          pattern: '^-?[0-9]+(\.[0-9]+)?$'
+          description: >
+            Optional. Expressed in this position's `currency`. Business rule: must be a positive
+            amount — zero/negative is rejected as a ValidationProblem (code NOT_POSITIVE). Omit
+            the field entirely when unknown — it is never inferred or defaulted.
+          example: "812.50"
+
+    Portfolio:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, positions, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE]
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+        createdAt:
+          type: string
+          format: date-time
+
+    Position:
+      type: object
+      additionalProperties: false
+      required: [id, ticker, market, quantity, currency]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        market:
+          type: string
+        quantity:
+          type: string
+          description: Decimal string, exactly as provided (no precision loss).
+        currency:
+          type: string
+        initialPurchaseDate:
+          type: string
+          format: date
+          nullable: true
+          description: null when the investor did not provide it.
+        averagePurchasePrice:
+          type: string
+          nullable: true
+          description: >
+            Decimal string in `currency`, or null when the investor did not provide it
+            (never 0, never inferred).
+
+    Problem:
+      type: object
+      description: RFC 9457 problem detail.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: Stable, machine-readable problem identifier (URI reference).
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+    ValidationProblem:
+      type: object
+      description: >
+        RFC 9457 problem detail for a portfolio that breaks one or more business rules. Carries the
+        same members as `Problem` plus a non-empty `errors` array (one entry per broken rule).
+      required: [type, title, status, errors]
+      properties:
+        type:
+          type: string
+          description: Stable, machine-readable problem identifier (URI reference).
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        errors:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [field, code, message]
+            properties:
+              field:
+                type: string
+                description: >
+                  Path to the offending input, e.g. `name`, `positions`,
+                  `positions[1].quantity`.
+              code:
+                type: string
+                enum:
+                  - REQUIRED            # a required value is missing (name, ticker, market, quantity, currency)
+                  - AT_LEAST_ONE        # a portfolio needs at least one position
+                  - INVALID_NUMBER      # quantity / price is not a valid decimal
+                  - INVALID_DATE        # initial purchase date is not a valid ISO date
+                  - NOT_POSITIVE        # quantity or average purchase price is <= 0
+                  - DUPLICATE_INSTRUMENT # a position for this ticker+market already exists in the portfolio
+                  - FUTURE_DATE         # initial purchase date is in the future
+                  - CURRENCY_FORMAT     # currency is not a 3-letter ISO 4217 code
+                  - NAME_TOO_LONG       # portfolio name exceeds 120 characters
+                description: Stable machine token identifying the rule that failed. This enum is the canonical list of FD001 validation codes.
+              message:
+                type: string

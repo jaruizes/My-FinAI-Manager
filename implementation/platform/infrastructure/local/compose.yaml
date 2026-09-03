@@ -1,15 +1,27 @@
-# EN001 — Local infrastructure for My-FinAI-Manager.
+# Local executable platform for My-FinAI-Manager.
 #
-# Intentionally minimal: PostgreSQL is the ONLY mandatory local dependency (enabler §9, FR-016).
-# No Kafka / Neo4j / Redis / Kubernetes. Started and stopped via
-# implementation/platform/start.sh and stop.sh.
+# EN001 introduced PostgreSQL. EN002 makes the WHOLE platform run as containers: `postgres`,
+# `backend` (Spring Boot), `frontend` (Angular build served by nginx), and an opt-in `e2e`
+# (Playwright) service behind the `e2e` profile.
+#
+# Started / stopped through implementation/platform/start.sh and stop.sh.
+# Browser E2E is run through implementation/platform/e2e.sh (isolated Compose project).
+#
+# No container_name is set anywhere, so `e2e.sh` can run this same file under a separate Compose
+# project name (`-p finai-e2e`) without name collisions.
+# No `platform:` is pinned — images build/run for the host architecture.
+#
+# Each buildable service declares BOTH `image:` (a stable local tag) and `build:` (the context).
+# start.sh / e2e.sh build the images with `docker build` and then run `docker compose up --no-build`
+# — this keeps orchestration in Compose while remaining compatible with the local Buildx plugin
+# version (`docker compose build` needs Buildx >= 0.17). `docker compose build` also works where a
+# newer Buildx is installed.
 
 name: my-finai-manager-local
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: my-finai-manager-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-finai}
       POSTGRES_USER: ${POSTGRES_USER:-finai}
@@ -23,6 +35,62 @@ services:
       interval: 3s
       timeout: 5s
       retries: 20
+
+  backend:
+    image: finai/core-service:local
+    # Locally built by start.sh / e2e.sh — never pulled from a registry.
+    pull_policy: never
+    build:
+      context: ../../backend/core-service
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/finai}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-finai}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-finai_local_dev}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  frontend:
+    image: finai/web:local
+    pull_policy: never
+    build:
+      context: ../../frontend/web
+    ports:
+      - "4200:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # Browser E2E runner — never started by a plain `docker compose up` (profile-gated).
+  # Driven by implementation/platform/e2e.sh.
+  e2e:
+    image: finai/e2e:local
+    pull_policy: never
+    build:
+      context: ../../e2e
+    profiles:
+      - e2e
+    environment:
+      E2E_BASE_URL: ${E2E_BASE_URL:-http://frontend}
+    volumes:
+      - ../../e2e/test-results:/work/test-results
+    depends_on:
+      frontend:
+        condition: service_healthy
 
 volumes:
   postgres-data:

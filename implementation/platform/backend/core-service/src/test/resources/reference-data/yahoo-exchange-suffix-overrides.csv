@@ -1,0 +1,7 @@
+source_exchange_code,yahoo_suffix,canonical_mic,currency,country_iso2,note
+FRA,DE,XETR,EUR,DE,Supplied CSV contains FRA rows with Yahoo .DE suffix; treat suffix as authoritative and normalize to XETR.
+ENX,PA,XPAR,EUR,FR,Generic Euronext row resolved from Yahoo suffix.
+ENX,AS,XAMS,EUR,NL,Generic Euronext row resolved from Yahoo suffix.
+ENX,BR,XBRU,EUR,BE,Generic Euronext row resolved from Yahoo suffix.
+ENX,LS,XLIS,EUR,PT,Generic Euronext row resolved from Yahoo suffix.
+ENX,NX,XEUR,,EU,Generic Euronext suffix; currency cannot safely be inferred from this mapping alone. Quarantine unless separately resolved.

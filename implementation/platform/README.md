@@ -3,118 +3,98 @@
 This directory is the single cumulative executable realization of My-FinAI-Manager. Every Feature
 Definition extends what is here; features do not create isolated applications.
 
-Established by **EN001 — Bootstrap Executable Platform**. EN001 provides only the runnable
-foundation — there is **no product behaviour** yet (no portfolios, valuation, risk, etc.).
+Since `EN002`, the **complete local platform runs as containers** through Docker Compose — there is
+no host Spring Boot process and no host Angular dev server.
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| Docker + Docker Compose | any recent | daemon must be running |
-| JDK | **21** (LTS) | backend build/run |
-| Maven | 3.9+ | backend build tool |
-| Node.js | **22 LTS** (≥ 22.12) or ≥ 20.19 | Angular 20 CLI requirement |
-| npm | bundled with Node | frontend deps |
+| To… | You need |
+|-----|----------|
+| **Run** the platform + E2E tests | **Docker + Docker Compose v2** (daemon running). Nothing else. |
+| **Build/test** application code locally | JDK 21 · the bundled `./mvnw` wrapper (backend — no host Maven needed) · Node ≥ 22.12 / ≥ 20.19 (frontend) |
 
-Version decisions are recorded in `specs/EN001-bootstrap-platform/research.md`
-(OD-1…OD-6): Java 21 · Spring Boot 3.5.x · Maven · Angular 20 + Node 22 LTS · PostgreSQL 16 · Flyway.
+Version decisions: `specs/EN001-bootstrap-platform/research.md` (Java 21 · Spring Boot 3.5.x ·
+Maven · Angular 20 · PostgreSQL 16 · Flyway) and
+`specs/EN002-containerized-e2e-testing-foundation/research.md` (Temurin 21 JRE image · nginx ·
+Playwright — pinned tags).
 
-> First run downloads container images, Maven dependencies and npm packages and can take several
-> minutes. Subsequent starts are fast.
+> First run pulls base images and builds the platform images — allow a few minutes. Later starts
+> reuse the images and are fast.
 
 ## Run the platform
 
 ```bash
 cd implementation/platform
 cp infrastructure/local/.env.example infrastructure/local/.env   # one-time (synthetic creds)
-./start.sh          # PostgreSQL + backend + frontend
-./stop.sh           # tears everything down (safe to run anytime)
+
+./start.sh            # build (if needed) + start postgres + backend + frontend as containers
+BUILD=1 ./start.sh    # force-rebuild the images first
+./stop.sh             # docker compose down (keeps the PostgreSQL data volume; safe anytime)
 ```
 
 | Component | URL |
 |-----------|-----|
+| Frontend | http://localhost:4200 |
 | Backend | http://localhost:8080 |
 | Backend health | http://localhost:8080/actuator/health |
-| Frontend | http://localhost:4200 |
 | PostgreSQL | localhost:5432 (db/user/pass from `infrastructure/local/.env`) |
 
-`start.sh` / `stop.sh` are the **canonical** lifecycle entry points. Their internals may change;
-the interface must not. Background process PIDs live in `.run/` (git-ignored).
+`start.sh` / `stop.sh` / `e2e.sh` are the **canonical** entry points. Their internals may change;
+the interface must not. The frontend container (nginx) serves the Angular build and reverse-proxies
+`/api/*` to the backend container — the browser only ever talks to the frontend origin.
 
-## Layout
-
-```text
-implementation/platform/
-├── start.sh / stop.sh        canonical lifecycle scripts
-├── backend/core-service/     single coarse-grained Spring Boot backend (ADR-001)
-├── contracts/openapi/        contract-first OpenAPI location (skeleton — FD001 adds operations)
-├── frontend/web/             Angular application shell
-└── infrastructure/local/     Docker Compose (PostgreSQL only)
-```
-
-### Backend — Hexagonal Architecture convention
-
-`backend/core-service/src/main/java/com/myfinaimanager/core/`
-
-```text
-CoreServiceApplication.java   Spring Boot entry point (only production class in EN001)
-platform/                     documented layer convention — NO production classes yet
-├── domain/                   business concepts, rules, deterministic calculations
-├── application/
-│   ├── port/in/              inbound ports (use cases exposed)
-│   └── port/out/             outbound ports (dependencies required)
-└── adapter/
-    ├── in/web/               REST controllers implementing the OpenAPI contract
-    └── out/persistence/      PostgreSQL adapters
-bootstrap/                    the only place Spring wiring / @Configuration may live
-```
-
-Dependency direction points inward: `adapter → application → domain`. `domain` and `application`
-must never import Spring, JDBC, HTTP, or serialization frameworks — enforced by
-`HexagonalArchitectureRulesTest` (ArchUnit). In EN001 that test is a guardrail (no modules yet);
-it becomes substantive with FD001.
-
-### How FD001 (and later features) extend this platform
-
-- Add a capability package as a sibling of `platform/` (e.g. `com.myfinaimanager.core.portfolio`)
-  using the same `domain / application / adapter` layout.
-- Add schema as `backend/core-service/src/main/resources/db/migration/V2__*.sql` (Flyway).
-- Add operations + schemas to `contracts/openapi/openapi.yaml` (contract-first) and a contract test.
-- Add frontend routes/components under `frontend/web/src/app/`; register nav entries in the
-  sidebar only for capabilities that now exist.
-- Extend `start.sh` / `stop.sh` only if a new runtime dependency is introduced — keep the
-  interface stable.
-
-## Tests
+## Browser E2E tests
 
 ```bash
-# Backend — unit tests (incl. ArchUnit) + Testcontainers integration test.
-cd implementation/platform/backend/core-service
-mvn verify            # needs a running Docker daemon for the Testcontainers integration test
-
-# Frontend — unit tests (headless Chrome).
-cd implementation/platform/frontend/web
-npm test -- --watch=false --browsers=ChromeHeadless
+./e2e.sh                    # run the Playwright smoke suite against an isolated containerized stack
+./e2e.sh -g "shell loads"   # filter to matching tests
 ```
 
-The backend integration test (`PlatformIntegrationIT`) starts a disposable `postgres:16` container
-via Testcontainers — no locally installed database is required.
+`e2e.sh` spins up a throwaway, isolated copy of the platform (separate Compose project, disposable
+DB volume, shifted host ports), runs Playwright in its own container (Chromium — no host browser
+needed), propagates the exit code, and tears everything down. Your normal `./start.sh` data is
+never touched. See `e2e/README.md` for debugging and for adding a feature-specific E2E test.
 
-## Troubleshooting
+## Testing layers
 
-- **`mvn verify` — "client version 1.32 is too old. Minimum supported API version is 1.44"**:
-  handled — `core-service/pom.xml` sets `api.version=1.44` for the Testcontainers test JVM
-  (`docker-java` ignores the `DOCKER_API_VERSION` env var). Bump the
-  `testcontainers.docker.api.version` property if a future engine raises its minimum.
-- **`start.sh` — "image postgres:16-alpine ... does not provide the specified platform (linux/amd64)"**:
-  you have a global `DOCKER_DEFAULT_PLATFORM=linux/amd64` and a previously-cached native-arch
-  image. Fix: `docker rmi postgres:16-alpine` then re-run `start.sh` (Compose re-pulls the right
-  platform).
-- **Angular CLI — "requires a minimum Node.js version of v20.19 or v22.12"**: your Node is older;
-  switch to a supported version (`nvm use 22`).
+| Layer | Runs where | Validates |
+|-------|-----------|-----------|
+| Unit / component | host (`./mvnw test`, `ng test`) | isolated deterministic logic |
+| Integration | host + Testcontainers | components against real application-managed infrastructure (PostgreSQL) |
+| Contract | host (`./mvnw verify`) | live payloads conform to `contracts/openapi/openapi.yaml` |
+| Architecture | host (ArchUnit — `StandardArchitectureRulesTest`) | ADR-003 `domain → business → infrastructure` dependency direction |
+| **E2E** | **containers (`./e2e.sh`, Playwright)** | **critical user journeys through the real containerized stack** |
 
-## Out of scope for EN001
+The layers are complementary — E2E does **not** replace lower-level tests, and the E2E suite stays
+deliberately small and journey-focused (`product/engineering/testing-strategy.md`).
 
-No authentication / Spring Security, no CI/CD, no Kafka / Neo4j / Redis / Kubernetes, no business
-schema or business API endpoints, no LLM/AI. These arrive with later Feature Definitions or
-Technical Enablers when justified.
+## Capabilities
+
+| Capability | Entry point | Reference |
+|------------|-------------|-----------|
+| Create investment portfolio | frontend `/portfolios/new` · `POST /api/portfolios` | `specs/FD001-create-investment-portfolio/quickstart.md` |
+| Search the Financial Instrument catalog | `GET /api/financial-instruments?query=` | `specs/EN004-establish-financial-instrument-reference-data/quickstart.md` |
+
+The external REST contract is `contracts/openapi/openapi.yaml` (OpenAPI 3.0.3). Portfolio data
+lives in the `investor` / `portfolio` / `position` tables created by Flyway migration
+`V2__portfolio.sql` (a single "Default Investor" is seeded — FD001 has no authentication yet; see
+`product/architecture/adrs/ADR-002-interim-unauthenticated-write-access.md`).
+
+The Financial Instrument catalog (`market` / `financial_instrument` tables — Flyway
+`V3__financial_instrument.sql`) is populated on backend start from committed reference data under
+`backend/core-service/src/main/resources/reference-data/` — a curated markets subset and a
+deterministic Yahoo-shape instrument sample, normalized to canonical `(ticker, MIC, currency)`
+purely through the two mapping CSVs. The import is idempotent, offline (no external provider is
+contacted), and flag-guarded by `app.reference-data.import-on-startup`. See EN004 and
+`backend/core-service/README.md`.
+
+## Backend architecture
+
+`backend/core-service` is the single Spring Boot deployable (ADR-001). It follows the **standard
+Spring backend architecture** of `product/architecture/adrs/ADR-003-standard-spring-backend-architecture.md`:
+each functional module is `domain / business / infrastructure` with dependencies pointing inward
+(`infrastructure → business → domain`). The `portfolio` module is the reference implementation;
+`financialinstrument` (EN004) is a second module following the same layout. Relational persistence
+uses **Spring Data JPA** (`domain.ports` port → persistence adapter → Spring Data repository →
+`@Entity` → PostgreSQL), with **Flyway owning the schema** (`spring.jpa.hibernate.ddl-auto: none`).
+Build with `./mvnw` — see `backend/core-service/README.md`.

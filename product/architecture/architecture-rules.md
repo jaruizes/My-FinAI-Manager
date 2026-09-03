@@ -43,15 +43,19 @@ Every backend business-capable component must follow Hexagonal Architecture prin
 
 Business logic must be isolated from infrastructure through explicit ports and adapters.
 
-A component must conceptually separate:
+A component must conceptually separate the business core from infrastructure through explicit ports and adapters.
 
-- Domain Layer
-- Application Layer
-- Inbound Ports
-- Outbound Ports
-- Adapters
+For Spring Boot components, this principle is implemented through the mandatory package model:
 
-The exact package or directory structure may differ by runtime, but the dependency direction must remain consistent.
+```text
+domain
+business
+infrastructure
+```
+
+For a modular monolith, this structure exists inside each functional module.
+
+The concrete dependency and package rules are defined by AR-053 through AR-061.
 
 ---
 
@@ -60,6 +64,18 @@ The exact package or directory structure may differ by runtime, but the dependen
 **MANDATORY**
 
 Infrastructure must depend on the business core, not the other way around.
+
+For Spring Boot components, the allowed dependency direction is:
+
+```text
+infrastructure → business → domain
+```
+
+`infrastructure` may also depend directly on `domain` when implementing or mapping domain ports and types.
+
+`domain` must not depend on `business` or `infrastructure`.
+
+`business` must not depend on `infrastructure`.
 
 The Domain Layer must not depend directly on:
 
@@ -816,6 +832,226 @@ Create an explicit ADR / approved rule change
 ```
 
 Silently violating an architecture rule is not acceptable.
+
+---
+
+# 14. Spring Backend Architecture
+
+## AR-053 — Standard Spring Package Structure
+
+**MANDATORY**
+
+Every Spring Boot business-capable component must use three primary architectural package areas:
+
+```text
+domain
+business
+infrastructure
+```
+
+For an independently deployable service, these packages exist directly below the service base package.
+
+For a modular monolith, they exist below each functional-module package.
+
+An ADR is required to adopt a materially different package architecture.
+
+---
+
+## AR-054 — Modular Monolith Is Module-First
+
+**MANDATORY**
+
+When one Spring Boot deployable contains multiple functional modules, package organization must be:
+
+```text
+<base-package>.<functional-module>.domain
+<base-package>.<functional-module>.business
+<base-package>.<functional-module>.infrastructure
+```
+
+and not a global layer-first structure such as:
+
+```text
+<base-package>.domain.<all-modules>
+<base-package>.business.<all-modules>
+<base-package>.infrastructure.<all-modules>
+```
+
+Functional modules remain the primary code ownership boundary.
+
+---
+
+## AR-055 — Domain Package Owns Model and Ports
+
+**MANDATORY**
+
+A Spring functional module's `domain` package contains:
+
+- `model` for domain classes, value objects, enums, aggregates, and related domain concepts;
+- `ports` for interfaces required by the business core to interact with external capabilities;
+- `exceptions` for domain/business exceptions.
+
+Ports must use domain-oriented types.
+
+Ports must not expose:
+
+- REST DTOs;
+- JPA entities;
+- Kafka records;
+- database-specific types;
+- provider SDK types;
+- framework-specific request/response types.
+
+---
+
+## AR-056 — Business Package Owns Business Operations
+
+**MANDATORY**
+
+The `business` package contains business-operation and use-case implementation.
+
+It:
+
+- depends on `domain`;
+- invokes domain behavior;
+- coordinates operations;
+- uses ports defined in `domain` to access persistence, remote services, messaging, AI providers, and other external capabilities.
+
+`business` must not depend on `infrastructure`.
+
+Infrastructure implementation details must not be embedded in business services.
+
+---
+
+## AR-057 — Infrastructure Contains Adapters
+
+**MANDATORY**
+
+All adapters and provider/framework-specific implementation belong under `infrastructure`.
+
+Each adapter must have an explicit package.
+
+Standard Spring adapter package conventions are:
+
+```text
+infrastructure.api.rest
+infrastructure.api.rest.dto
+infrastructure.api.rest.mapper
+infrastructure.persistence
+infrastructure.messaging
+```
+
+Additional adapter types may use dedicated packages such as:
+
+```text
+infrastructure.client
+infrastructure.templating
+infrastructure.storage
+infrastructure.ai
+```
+
+when required.
+
+---
+
+## AR-058 — REST Adapter Package Convention
+
+**MANDATORY**
+
+REST controllers belong under:
+
+```text
+infrastructure.api.rest
+```
+
+REST request/response DTOs belong under:
+
+```text
+infrastructure.api.rest.dto
+```
+
+REST-specific mapping code (DTO ⇄ business command / domain type) belongs under:
+
+```text
+infrastructure.api.rest.mapper
+```
+
+A REST mapper is part of the REST adapter, so it lives inside `infrastructure.api.rest` — not in a
+separate `infrastructure.api`-level sibling package. `api/` is REST-scoped in this convention;
+messaging adapters use `infrastructure.messaging`, not `infrastructure.api.messaging`. (Amended
+2026-09-02 alongside ADR-003.)
+
+REST DTOs must not become domain models.
+
+Controllers must delegate business behavior to the `business` layer.
+
+---
+
+## AR-059 — Messaging Adapter Package Convention
+
+**MANDATORY**
+
+Messaging producers, consumers, message DTOs, serialization concerns, and broker-specific implementation belong under:
+
+```text
+infrastructure.messaging
+```
+
+or its child packages.
+
+Kafka or other broker-specific types must not cross into `domain`.
+
+Message consumers must delegate business behavior rather than own it.
+
+---
+
+## AR-060 — Spring Data JPA Is the Standard Relational Persistence Adapter
+
+**MANDATORY for Spring relational persistence**
+
+Spring Boot components using relational business persistence must use Spring Data JPA as the default persistence abstraction.
+
+Persistence code belongs under:
+
+```text
+infrastructure.persistence
+```
+
+Recommended child packages are:
+
+```text
+entity
+repository
+mapper
+```
+
+JPA entities are infrastructure models.
+
+Domain model classes must not be annotated as JPA entities.
+
+A persistence adapter may implement a port from `domain` and delegate storage operations to one or more Spring Data `JpaRepository` interfaces.
+
+Hand-written SQL, `JdbcClient`, `JdbcTemplate`, native queries, or direct JDBC are CONDITIONAL and require an explicit technical justification.
+
+Flyway or the approved schema-migration mechanism remains responsible for schema evolution.
+
+---
+
+## AR-061 — Spring Architecture Must Be Automatically Checked
+
+**MANDATORY where ArchUnit can enforce the rule**
+
+Spring components must include architecture tests that verify at least:
+
+```text
+domain          does not depend on business
+domain          does not depend on infrastructure
+business        does not depend on infrastructure
+```
+
+Architecture tests should additionally verify the standard package placement for REST, messaging, and persistence adapters where practical.
+
+Architecture violations must fail automated verification unless an approved ADR documents an exception.
 
 ---
 

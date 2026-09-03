@@ -120,97 +120,193 @@ Core domain behavior belongs to the corresponding backend domain capability.
 
 ---
 
-## 4. Hexagonal Architecture
+## 4. Hexagonal Architecture and Spring Backend Structure
 
 All business-capable backend components must follow Hexagonal Architecture principles.
 
-Each component should conceptually separate:
+For Spring Boot components, the architecture is expressed through three primary package areas:
 
 ```text
-                  ┌──────────────────────┐
-                  │     Inbound Ports    │
-                  └──────────┬───────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   Application   │
-                    │      Layer      │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │     Domain      │
-                    │      Layer      │
-                    └────────┬────────┘
-                             │
-                  ┌──────────▼───────────┐
-                  │     Outbound Ports   │
-                  └──────────┬───────────┘
-                             │
-                    ┌────────▼────────┐
-                    │    Adapters     │
-                    └─────────────────┘
+domain
+business
+infrastructure
 ```
 
-Typical responsibilities:
+The dependency direction is:
 
-### Domain Layer
+```text
+infrastructure
+     ↓
+  business
+     ↓
+   domain
+```
 
-Contains:
+`domain` is the innermost package and must remain independent from Spring and infrastructure technologies.
+
+### Domain
+
+The `domain` package contains the business model and the ports required by the business core.
+
+Recommended structure:
+
+```text
+domain/
+├── model/
+│   ├── entities / aggregates
+│   ├── value objects
+│   ├── enums
+│   └── domain concepts
+├── ports/
+│   └── inbound/outbound-neutral business dependencies
+└── exceptions/
+    └── domain/business exceptions
+```
+
+The `domain` package contains:
 
 - domain concepts;
-- business rules;
-- deterministic calculations;
-- domain policies;
-- business invariants.
+- business rules and invariants that belong to the model;
+- deterministic calculations that belong to domain concepts;
+- enums and value objects;
+- domain exceptions;
+- ports used by business logic to reach persistence, remote services, messaging, AI providers, or other external capabilities.
 
-The Domain Layer must not depend on infrastructure technologies.
+The `domain` package must not depend on:
 
-### Application Layer
+- Spring;
+- Spring Data;
+- JPA/Hibernate;
+- HTTP frameworks;
+- Kafka;
+- database clients;
+- provider SDKs;
+- serialization frameworks;
+- infrastructure DTOs.
 
-Contains:
+Ports must use domain-oriented types and must not expose JPA entities, HTTP DTOs, Kafka records, provider payloads, or framework-specific types.
 
-- use cases;
-- application orchestration;
-- transaction boundaries where applicable;
-- interaction with ports;
-- coordination between domain capabilities.
+### Business
 
-### Inbound Ports
+The `business` package contains the implementation of business operations and use cases.
 
-Represent ways in which the component can be invoked.
+It is responsible for:
 
-Examples may include:
+- business-operation orchestration;
+- application-level validation and coordination;
+- invocation of domain behavior;
+- transaction boundaries where appropriate;
+- interaction with ports defined in `domain`;
+- coordination between domain concepts belonging to the same functional module.
 
-- API use cases;
-- scheduled processes;
-- message consumers;
-- internal application interfaces.
+`business` may depend on `domain`.
 
-### Outbound Ports
+`business` must not depend on `infrastructure`.
 
-Represent dependencies required by the application or domain.
+Spring annotations may be used in `business` when they provide application/runtime behavior such as dependency injection or transaction management, but infrastructure-specific implementation details must remain outside the package.
 
-Examples may include:
+### Infrastructure
 
-- persistence;
-- market-data providers;
-- news providers;
-- LLM providers;
-- external APIs;
-- event publication.
+The `infrastructure` package contains all adapters and framework/provider-specific implementation.
 
-### Adapters
+Each adapter must have an explicit package boundary.
 
-Implement inbound or outbound ports using concrete technologies.
+Typical structure:
 
-Examples may include:
+```text
+infrastructure/
+├── api/
+│   └── rest/
+│       ├── dto/
+│       ├── mapper/
+│       └── ...
+├── persistence/
+│   ├── entity/
+│   ├── repository/
+│   ├── mapper/
+│   └── ...
+├── messaging/
+│   └── ...
+├── client/
+│   └── ...
+└── <other-adapter>/
+```
 
-- REST controllers;
-- PostgreSQL repositories;
-- Kafka producers and consumers;
-- Neo4j adapters;
-- AWS model-provider adapters.
+REST adapters must live under:
 
-Dependency direction must point toward the business core rather than toward infrastructure.
+```text
+infrastructure.api.rest
+```
+
+REST DTOs must live under:
+
+```text
+infrastructure.api.rest.dto
+```
+
+REST-specific mappers must live under:
+
+```text
+infrastructure.api.rest.mapper
+```
+
+Messaging adapters must live under:
+
+```text
+infrastructure.messaging
+```
+
+Persistence adapters must live under:
+
+```text
+infrastructure.persistence
+```
+
+Infrastructure may depend on `business` and `domain`.
+
+Infrastructure implements the ports defined in `domain`.
+
+### Modular Monolith Package Structure
+
+When one Spring Boot deployable contains multiple functional modules, the first package boundary below the application root must represent the functional module.
+
+Each functional module then contains its own `domain`, `business`, and `infrastructure` packages.
+
+Conceptually:
+
+```text
+com.myfinaimanager.core
+│
+├── portfolio/
+│   ├── domain/
+│   │   ├── model/
+│   │   ├── ports/
+│   │   └── exceptions/
+│   ├── business/
+│   └── infrastructure/
+│       ├── api/
+│       │   ├── rest/
+│       │   │   └── dto/
+│       │   └── mapper/
+│       ├── persistence/
+│       └── messaging/
+│
+├── financialinstrument/
+│   ├── domain/
+│   ├── business/
+│   └── infrastructure/
+│
+└── valuation/
+    ├── domain/
+    ├── business/
+    └── infrastructure/
+```
+
+This structure preserves functional-module boundaries while applying the same architecture consistently to modular monoliths and independently deployable Spring services.
+
+The package structure is mandatory for Spring backend components unless an ADR explicitly approves an exception.
+
+Architecture conformance should be enforced with ArchUnit where practical.
 
 ---
 
@@ -324,6 +420,23 @@ Advantages may include:
 - easier end-to-end testing.
 
 The modules must still maintain explicit boundaries.
+
+For Spring Boot modular monoliths, package organization is module-first:
+
+```text
+<base-package>/
+├── <functional-module-a>/
+│   ├── domain/
+│   ├── business/
+│   └── infrastructure/
+├── <functional-module-b>/
+│   ├── domain/
+│   ├── business/
+│   └── infrastructure/
+└── ...
+```
+
+A module must not bypass another module's business boundary by accessing its infrastructure or persistence packages directly.
 
 A Modular Monolith must not become an unstructured monolith.
 
@@ -615,6 +728,32 @@ It is suitable for information such as:
 
 Exact data ownership and schemas are defined by implementation plans and architecture decisions.
 
+For Spring Boot components using relational persistence, Spring Data JPA is the standard persistence abstraction.
+
+The expected architecture is:
+
+```text
+domain.port
+    ↑ implemented by
+infrastructure.persistence adapter
+    ↓ delegates to
+Spring Data JpaRepository
+    ↓
+JPA entities
+    ↓
+PostgreSQL
+```
+
+JPA entities are infrastructure models and must not be used as canonical domain models.
+
+Domain classes must not carry JPA persistence annotations.
+
+Spring Data derived queries, specifications, criteria, or explicitly justified repository queries should be preferred over embedding general-purpose SQL in business-facing repository adapters.
+
+Direct JDBC or handwritten SQL is conditional and requires a concrete technical reason.
+
+Flyway remains responsible for relational schema evolution.
+
 ---
 
 ## Neo4j
@@ -685,6 +824,8 @@ This section does not make every technology mandatory.
 |---|---|---|
 | Web Frontend | Angular | Preferred / Approved |
 | Backend | Spring Boot | Approved |
+| Spring Build Tool | Maven | Standard / Required for Spring components |
+| Spring Relational Persistence | Spring Data JPA / Hibernate | Preferred standard |
 | Backend / AI / Data | Python | Approved |
 | External Business API | REST + OpenAPI | Preferred default |
 | Asynchronous Messaging | Kafka | Approved when justified |
@@ -964,7 +1105,20 @@ Service boundaries may later become finer when justified by independent scalabil
 
 Functional domains do not automatically map one-to-one to directories under `backend/`.
 
-Each backend component must follow the Hexagonal Architecture rules defined by this project.
+Each backend component must follow the architecture rules defined by this project.
+
+Spring Boot components must use the standard `domain / business / infrastructure` package model.
+
+When a backend deployable contains multiple functional modules, it must organize code module-first and layer-second:
+
+```text
+<functional-module>/
+├── domain/
+├── business/
+└── infrastructure/
+```
+
+Spring Boot components use Maven as their standard build tool.
 
 ## Contracts
 

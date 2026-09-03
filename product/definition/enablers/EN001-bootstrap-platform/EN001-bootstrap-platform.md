@@ -362,5 +362,5 @@ Before implementation:
 - [X] No speculative infrastructure has been introduced.
 
 **Approved by:*jaruiz*  
-**Date:**  
+**Date:*2026-09-01*  
 **Status:** Approved

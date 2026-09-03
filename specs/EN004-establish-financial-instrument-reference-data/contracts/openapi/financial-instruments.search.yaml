@@ -1,0 +1,147 @@
+# EN004 — Establish Financial Instrument Reference Data
+#
+# The single operation EN004 adds to the platform's external business API. During implementation
+# this is MERGED into implementation/platform/contracts/openapi/openapi.yaml. Business language
+# only — no persistence/provider leakage (AR-010, AR-011): the response carries `ticker`,
+# `market` (MIC), `currency`, `name`, `active`, optional `isin` — NEVER `providerSymbol`, the
+# Yahoo `Exchange`, `operatingMic`, `instrumentType`, or any `source*` field (spec FR-028; VC-010).
+# Errors follow RFC 9457 `application/problem+json` (AR-012).
+#
+# Dialect: OpenAPI 3.0.3 — matches the swagger-request-validator 2.44.x used by the contract test
+# (the platform authors all contracts in 3.0.3; see FD001 research.md D9 and the
+# local-dev-environment note).
+
+openapi: 3.0.3
+info:
+  title: My-FinAI-Manager Platform API
+  version: 0.1.0
+  description: >
+    Adds Financial Instrument reference-data search (`GET /api/financial-instruments`) required by
+    FD002 for controlled instrument selection. A standalone markets endpoint is not part of this
+    version (EN004 spec FR-027).
+
+paths:
+  /api/financial-instruments:
+    get:
+      operationId: searchFinancialInstruments
+      tags: [Financial Instruments]
+      summary: Search the Financial Instrument catalog
+      description: >
+        Returns catalogued Financial Instrument listings whose ticker exactly matches (case
+        insensitive) the query, or whose name contains it (case insensitive). Only listings that
+        may currently be selected for a new Position are returned: `active = true` and
+        `currency` in `EUR`/`USD`. Exact-ticker matches are listed first, then name matches, each
+        block ordered by ticker. An empty result is `200` with an empty array (not `404`). The
+        search runs entirely against the platform's local catalog — no external reference-data
+        provider is contacted.
+      parameters:
+        - name: query
+          in: query
+          required: false
+          description: >
+            Ticker or (part of an) instrument name. Trimmed; case insensitive. Must be non-blank
+            and at least 1 character after trimming.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+      responses:
+        '200':
+          description: >
+            Zero or more matching selectable listings. Order: exact-ticker matches first, then
+            name matches; each block ordered by ticker ascending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialInstrumentList'
+              examples:
+                tickerHit:
+                  summary: Exact ticker search
+                  value:
+                    - id: 6f9619ff-8b86-5d11-b42d-00c04fc964ff
+                      name: Apple Inc.
+                      ticker: AAPL
+                      market: XNAS
+                      currency: USD
+                      active: true
+                nameHit:
+                  summary: Partial name search returning two listings of the same company
+                  value:
+                    - id: 2b1c3d4e-5f60-5a71-8293-a4b5c6d7e8f9
+                      name: Banco Santander, S.A.
+                      ticker: SAN
+                      market: XMAD
+                      currency: EUR
+                      isin: ES0113900J37
+                      active: true
+                noResults:
+                  summary: Nothing matches — 200 with an empty array
+                  value: []
+        '400':
+          description: >
+            The `query` parameter is missing or blank after trimming.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: /problems/invalid-search-query
+                title: Search query is required
+                status: 400
+                detail: Provide a ticker or part of an instrument name to search for.
+                instance: /api/financial-instruments
+
+components:
+  schemas:
+    FinancialInstrumentList:
+      type: array
+      items:
+        $ref: '#/components/schemas/FinancialInstrument'
+
+    FinancialInstrument:
+      type: object
+      description: >
+        A selectable Financial Instrument listing from the local catalog. This is a normalized,
+        provider-neutral representation — it never exposes source/provider fields.
+      required: [id, name, ticker, market, currency, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Stable catalog identifier for this listing.
+        name:
+          type: string
+          description: Human-readable instrument name.
+        ticker:
+          type: string
+          description: Normalized trading ticker (uppercase, no provider suffix).
+          example: SAN
+        market:
+          type: string
+          description: ISO 10383 Market Identifier Code (MIC) of the listing venue.
+          example: XMAD
+        currency:
+          type: string
+          description: ISO 4217 trading/Position currency. Restricted to the initially supported set.
+          enum: [EUR, USD]
+        isin:
+          type: string
+          nullable: true
+          description: ISO 6166 ISIN when available; `null` otherwise.
+          example: ES0113900J37
+        active:
+          type: boolean
+          description: Whether the listing may currently be selected for a new Position (always `true` in search results).
+
+    # `Problem` is already defined in openapi.yaml (RFC 9457, flat: type/title/status/detail/instance).
+    # Repeated here only so this fragment validates standalone; the merge REUSES the existing schema.
+    Problem:
+      type: object
+      description: RFC 9457 problem detail.
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

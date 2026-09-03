@@ -1,0 +1,9 @@
+# Keep the Docker build context small and reproducible (EN002).
+node_modules/
+dist/
+.angular/
+.git
+.gitignore
+*.log
+Dockerfile
+.dockerignore

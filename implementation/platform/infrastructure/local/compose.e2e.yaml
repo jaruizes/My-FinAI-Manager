@@ -1,0 +1,31 @@
+# EN002 — E2E isolation override.
+#
+# Applied ONLY by implementation/platform/e2e.sh:
+#   docker compose -p finai-e2e -f compose.yaml -f compose.e2e.yaml --profile e2e ...
+#
+# Purpose (OD-6, OD-EN002-4): every E2E run is fully isolated from the developer's normal platform.
+#   - `postgres` uses a DISPOSABLE, project-scoped volume — `e2e.sh` removes it with `down -v`.
+#     The persistent `my-finai-manager-postgres-data` volume is NEVER referenced here.
+#   - published host ports are shifted (15432 / 18080 / 14200) so an E2E run can happen while the
+#     normal `./start.sh` platform is also up, with no port collision.
+#
+# `!override` replaces the base list instead of merging it (needs Docker Compose >= 2.24).
+
+services:
+  postgres:
+    volumes: !override
+      - e2e-postgres-data:/var/lib/postgresql/data
+    ports: !override
+      - "15432:5432"
+
+  backend:
+    ports: !override
+      - "18080:8080"
+
+  frontend:
+    ports: !override
+      - "14200:80"
+
+volumes:
+  # Project-scoped (`finai-e2e_e2e-postgres-data`); disposable — no fixed `name:`.
+  e2e-postgres-data:

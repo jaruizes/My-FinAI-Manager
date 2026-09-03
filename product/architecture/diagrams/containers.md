@@ -11,12 +11,12 @@ A logical container shown in the target diagram may initially be part of a Modul
 
 ---
 
-## Current Realized State (after EN001)
+## Current Realized State (after FD001)
 
 Established by `EN001 — Bootstrap Executable Platform` under the topology fixed by
-`ADR-001 — Initial Backend Topology`. This is the **minimum executable platform**; it contains
-**no business capability yet** (Portfolio, Valuation, Risk, etc. are added by Feature Definitions
-starting with `FD001 — Create Investment Portfolio`).
+`ADR-001 — Initial Backend Topology`, then extended by `FD001 — Create Investment Portfolio` with
+the first business capability: a `portfolio` module in `core-service`, the `POST /api/portfolios`
+operation, and the `investor` / `portfolio` / `position` schema.
 
 ```mermaid
 flowchart TB
@@ -24,19 +24,19 @@ flowchart TB
 
     subgraph Client["Client Layer"]
         Web["Angular Web Frontend
-(frontend/web) — application shell only"]
+(frontend/web) — app shell + Create Portfolio screen"]
     end
 
     subgraph Backend["Backend — one coarse-grained deployable (ADR-001)"]
         Core["core-service
-Spring Boot · Hexagonal Architecture convention
-Actuator health endpoint only
-(no business modules yet — added by FD001+)"]
+Spring Boot · Hexagonal Architecture (enforced by ArchUnit)
+Actuator health endpoint
+portfolio module — POST /api/portfolios"]
     end
 
     subgraph Data["Persistence"]
         Postgres[("PostgreSQL
-Flyway baseline · no business schema")]
+Flyway · investor / portfolio / position tables")]
     end
 
     subgraph Infra["Local Infrastructure"]
@@ -46,14 +46,14 @@ infrastructure/local/compose.yaml"]
 
     subgraph Contracts["Contracts"]
         OpenAPI["contracts/openapi/openapi.yaml
-OpenAPI 3.1 skeleton — no operations"]
+OpenAPI 3.0.3 — POST /api/portfolios"]
     end
 
     Investor --> Web
-    Web -->|"HTTP — no business operations defined yet"| Core
+    Web -->|"HTTP — POST /api/portfolios"| Core
     Core -->|"JDBC + Flyway migrations"| Postgres
     Compose -.->|"provisions locally"| Postgres
-    Core -.->|"implements (future operations)"| OpenAPI
+    Core -.->|"implements (contract-tested)"| OpenAPI
 ```
 
 ### Not yet realized
@@ -62,11 +62,14 @@ The following appear only in the **Target Architectural Direction** below and ar
 absent from the current platform:
 
 - BFF, and a separately deployed External Business API container (the API surface exists only as
-  the empty OpenAPI skeleton location; `core-service` will expose operations directly).
-- Business capability modules (Portfolio, Financial Instruments, Valuation, Risk, Investment
-  Thesis, Market Intelligence, News & Events, Recommendations, Stop-Loss, Portfolio Review).
+  the OpenAPI contract location; `core-service` exposes operations directly).
+- Business capability modules other than the first slice of Portfolio Management: Financial
+  Instruments, Valuation, Risk, Investment Thesis, Market Intelligence, News & Events,
+  Recommendations, Stop-Loss, Portfolio Review. (Portfolio Management currently covers only
+  portfolio creation — listing, viewing, editing, valuation and risk are not yet realized.)
 - Neo4j, Kafka, external market-data / news / indicator providers, AI / LLM providers.
-- Authentication / authorization, CI/CD, container images, cloud infrastructure.
+- Authentication / authorization, CI/CD, container images, cloud infrastructure. FD001 writes are
+  unauthenticated on purpose — see `ADR-002 — Interim Unauthenticated Write Access`.
 
 ---
 

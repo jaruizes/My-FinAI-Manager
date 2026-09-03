@@ -158,6 +158,69 @@ Do not move human-governed product definitions into framework-owned directories.
 
 ---
 
+## Specification Context Rules
+
+Before generating or formalizing any specification, including work initiated through Spec Kit commands such as `/speckit.specify`, Claude must automatically read and comply with:
+
+```text
+CLAUDE.md
+.specify/memory/constitution.md
+
+product/definition/global/
+product/architecture/
+product/engineering/
+product/governance/
+product/definition/global/ux/design-system.md
+```
+
+Claude must also read:
+
+- the target Feature Definition or Technical Enabler;
+- all applicable ADRs under `product/architecture/adrs/`;
+- any feature-specific UX artifacts associated with the target Feature Definition.
+
+For Product Feature specifications:
+
+- Treat the target Feature Definition as the authoritative source of product intent.
+- Preserve its purpose, scope, business rules, acceptance criteria, information objects, relevant business events, and explicit product decisions.
+- Do not invent additional product behavior.
+- Do not introduce technical behavior that is not required by the approved Feature Definition.
+- Respect explicit out-of-scope items defined by the Feature Definition.
+- Extend the existing executable platform under `implementation/platform/`.
+- Respect the approved backend topology and applicable ADRs.
+- Use the existing `core-service` unless an approved architecture decision explicitly introduces another deployable component.
+- External REST behavior must follow contract-first development and be represented in OpenAPI.
+- Persistence must follow the project's approved PostgreSQL and data-ownership policies.
+- Backend business logic must follow Hexagonal Architecture.
+- Applicable integration tests against PostgreSQL or other application-managed infrastructure must use Testcontainers according to project policy.
+- Frontend behavior must follow the global design system and any approved feature-specific UX artifacts.
+- If material ambiguity remains, surface it explicitly instead of making an assumption.
+
+For Technical Enabler specifications:
+
+- Treat the target Enabler Definition as the authoritative technical intent.
+- Do not force artificial investor-facing user stories or business functionality into the enabler.
+- Do not introduce product behavior, business APIs, schemas, technologies, infrastructure, or deployment boundaries beyond the approved enabler scope.
+- Surface material technical decisions that require human approval rather than silently choosing them.
+
+These rules are repository-wide defaults. They do not need to be repeated in every `/speckit.specify` prompt.
+
+A normal Feature Definition invocation may therefore be concise, for example:
+
+```text
+/speckit.specify
+
+Create the formal SDD specification for:
+
+FD001-create-investment-portfolio
+
+Authoritative source:
+product/definition/features/FD001-create-investment-portfolio/feature-definition.md
+```
+
+---
+
+
 # 5. Implementation Location
 
 All executable product implementation belongs under:

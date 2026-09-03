@@ -84,6 +84,9 @@ Technology choices must follow these principles:
 | Frontend Language | TypeScript | REQUIRED | Applies to Angular frontend code |
 | Backend Runtime | Java | ALLOWED | Primary runtime for Spring-based capabilities |
 | Backend Framework | Spring Boot | ALLOWED | Preferred Java backend framework |
+| Spring Build Tool | Maven | REQUIRED | Standard build tool for Spring Boot components; Gradle requires an explicit architectural exception |
+| Spring Relational Persistence | Spring Data JPA / Hibernate | REQUIRED by default | Standard relational persistence abstraction for Spring components |
+| Direct JDBC | JdbcClient / JdbcTemplate / JDBC | CONDITIONAL | Use only when a concrete technical need justifies bypassing Spring Data JPA |
 | Backend Runtime | Python | ALLOWED | Approved for AI, data, analytics, and backend capabilities |
 | Python API Framework | FastAPI | ALLOWED | Preferred option when Python exposes HTTP APIs |
 | External Business API | REST | PREFERRED | Default interaction style for external business capabilities |
@@ -115,6 +118,7 @@ Technology choices must follow these principles:
 | CI/CD | GitHub Actions | ALLOWED | Default for the repository unless context changes |
 | Secrets | External secret management | REQUIRED for deployed environments | Secrets must not be committed |
 | Test Containers | Testcontainers | REQUIRED for applicable integration tests | Mandatory by default for integration tests against application-managed infrastructure when a suitable container exists |
+| Browser E2E Testing | Playwright | PREFERRED | Initial browser-based E2E framework, approved by `EN002 — Establish Containerized End-to-End Testing Foundation`. Runs containerized against the running platform; Chromium baseline. Not a replacement for unit / integration / contract / architecture tests. An alternative E2E framework requires the technology introduction process |
 | Schema Migration | Flyway / equivalent | PREFERRED for relational DBs | Exact tool follows runtime choice |
 
 ---
@@ -155,7 +159,41 @@ It is particularly appropriate for:
 
 Spring-based components must still follow Hexagonal Architecture.
 
-Framework annotations and infrastructure concerns must not invade the domain layer unnecessarily.
+Spring components use the project-standard package structure:
+
+```text
+<functional-module>/
+├── domain/
+├── business/
+└── infrastructure/
+```
+
+For independently deployable single-module services, `domain`, `business`, and `infrastructure` may exist directly below the base package.
+
+Spring Boot components must use Maven as their build tool unless an ADR explicitly approves an exception.
+
+Framework annotations and infrastructure concerns must not invade the domain layer.
+
+The `domain` package must remain free of Spring, Spring Data, JPA/Hibernate, transport, broker, and provider-specific dependencies.
+
+---
+
+## Maven
+
+Maven is the required build tool for Spring Boot components.
+
+Spring repositories should provide the Maven Wrapper where practical:
+
+```text
+pom.xml
+mvnw
+mvnw.cmd
+.mvn/
+```
+
+Gradle must not be introduced into a Spring component by default.
+
+Existing Spring components using Gradle should migrate through an approved architecture/enabler change when the migration is in scope.
 
 ---
 
@@ -281,6 +319,38 @@ Use PostgreSQL for:
 PostgreSQL should be considered before introducing another persistence technology.
 
 ---
+
+## Spring Data JPA
+
+Spring Data JPA is the required default persistence abstraction for relational business state in Spring Boot components.
+
+The expected separation is:
+
+```text
+domain port
+    ↑
+infrastructure persistence adapter
+    ↓
+Spring Data JpaRepository
+    ↓
+JPA entity
+    ↓
+PostgreSQL
+```
+
+Rules:
+
+- domain classes must not be JPA entities;
+- JPA annotations belong to persistence entities under `infrastructure.persistence`;
+- persistence adapters implement ports defined in `domain`;
+- Spring Data repository interfaces remain infrastructure concerns;
+- mapping between JPA entities and domain models must be explicit when models differ;
+- schema management remains the responsibility of Flyway or the approved migration mechanism;
+- derived query methods, specifications, criteria, or repository-level queries should be preferred before direct JDBC;
+- `JdbcClient`, `JdbcTemplate`, direct JDBC, native SQL, and similar approaches are conditional and require a concrete technical justification.
+
+Direct SQL may still be appropriate for cases such as measured performance needs, database-specific bulk operations, or queries that are materially clearer or safer outside ORM. Such exceptions must remain isolated in infrastructure.
+
 
 ## pgvector
 
@@ -609,9 +679,24 @@ Preferred testing approaches include:
 
 - Angular-compatible unit testing tools
 - component testing
-- end-to-end testing when required
 
 Tool choice must not weaken the project's TDD and coverage requirements.
+
+## Browser End-to-End
+
+Playwright is the approved framework for browser-based end-to-end tests, introduced by
+`EN002 — Establish Containerized End-to-End Testing Foundation`.
+
+- E2E tests run inside a container against the fully containerized platform (`postgres`,
+  `backend`, `frontend`); developers do not need locally installed browser binaries.
+- E2E tests drive the user-facing frontend in a real browser; they must not bypass the frontend
+  and call backend APIs directly as the primary validation mechanism.
+- The initial browser baseline is Chromium; additional browsers require explicit approval.
+- E2E does not replace unit, integration, contract, or architecture tests. The E2E suite stays
+  deliberately small and focused on critical user journeys, per
+  `product/engineering/testing-strategy.md`.
+- Introducing an additional or alternative browser-based E2E framework requires the technology
+  introduction process.
 
 ---
 
@@ -686,11 +771,15 @@ External API
 
 Backend
   Spring Boot
+    ├── Maven
+    └── domain / business / infrastructure
   or
   Python / FastAPI
 
 Persistence
   PostgreSQL
+      │
+      ├── Spring Data JPA for Spring relational persistence
       │
       ├── pgvector if semantic vectors are needed
       └── Neo4j when graph use cases justify it
@@ -704,6 +793,13 @@ AI / LLM
       ├── OpenAI
       ├── Anthropic
       └── Vertex AI
+
+Testing
+  Unit + component (frontend), JUnit 5 / pytest (backend)
+  Testcontainers for application-managed infrastructure integration
+  OpenAPI / AsyncAPI contract validation
+  Architecture tests (e.g. ArchUnit)
+  Playwright for containerized browser E2E of critical journeys
 
 Observability
   OpenTelemetry

@@ -330,9 +330,58 @@ At minimum, verification should cover:
 - currency handling;
 - persistence of Portfolio and Positions;
 - API contract behavior;
-- frontend-to-backend creation flow.
+- frontend-to-backend creation flow;
+- End-to-End verification of the critical Create Portfolio user journey.
 
 Integration tests against application-managed persistence must follow the project's Testcontainers policy.
+
+## E2E Testing
+
+FD001 includes a critical user journey that crosses:
+
+```text
+frontend → backend → persistence
+```
+
+An automated End-to-End test is therefore mandatory using the containerized Playwright foundation established by EN002.
+
+### E2E-001 — Create Portfolio
+
+**Given** the containerized platform is running  
+**And** the Investor opens the Create Portfolio screen  
+**When** the Investor enters a valid Portfolio name  
+**And** adds one valid Position  
+**And** saves the Portfolio  
+**Then** the Portfolio is created successfully  
+**And** the UI displays the successful creation confirmation.
+
+The test must exercise the real application stack through the browser:
+
+```text
+Playwright
+    ↓
+Frontend
+    ↓
+REST API
+    ↓
+core-service
+    ↓
+PostgreSQL
+```
+
+The E2E test must not mock frontend-to-backend communication or PostgreSQL.
+
+Expected test location:
+
+```text
+implementation/platform/e2e/tests/FD001-create-portfolio.spec.ts
+```
+
+The E2E test is part of the acceptance evidence for FD001.
+
+**FD001 MUST NOT be accepted, closed, or marked Completed if E2E-001 is missing or failing.**
+
+A successful E2E execution is therefore a mandatory closure gate for this Feature Definition.
 
 ---
 
@@ -367,13 +416,14 @@ UX details may still be refined through visual design artifacts without changing
 
 Before formal specification:
 
-- [ ] Purpose is correct.
-- [ ] Scope is correct.
-- [ ] Business rules are approved.
-- [ ] Acceptance criteria reflect intended behavior.
-- [ ] Explicit product decisions are approved.
-- [ ] No unapproved behavior has been added.
+- [X] Purpose is correct.
+- [X] Scope is correct.
+- [X] Business rules are approved.
+- [X] Acceptance criteria reflect intended behavior.
+- [X] Explicit product decisions are approved.
+- [X] No unapproved behavior has been added.
+- [ ] E2E-001 exists and passes against the containerized platform before final feature closure.
 
-**Approved by:**  
-**Date:**  
-**Status:** Draft / Approved / Superseded
+**Approved by:*jaruiz*  
+**Date:*2026-09-01*  
+**Status:** Approved

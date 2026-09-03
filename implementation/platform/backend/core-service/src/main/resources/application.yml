@@ -17,6 +17,36 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  jpa:
+    # EN003 / ADR-003: Flyway owns the schema — Hibernate MUST NOT create or evolve it.
+    hibernate:
+      ddl-auto: none
+    # No Open Session In View: the persistence mapper (not a view render) reads the aggregate.
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          # Match the existing Instant/Timestamp handling (created_at is TIMESTAMPTZ).
+          time_zone: UTC
+
+  mvc:
+    # RFC 9457 application/problem+json error bodies (FD001 research.md D4, AR-012).
+    problemdetails:
+      enabled: true
+
+# EN004 — Financial Instrument reference data (financialinstrument module).
+# The reference CSVs are packaged as classpath resources (no host file, no runtime mount).
+# `import-on-startup` runs the mapping-driven import once on boot; it is idempotent and safe to
+# re-run (container restart). Test slices set it false and drive the import explicitly.
+# No secrets here.
+app:
+  reference-data:
+    import-on-startup: true
+    markets-file: "classpath:reference-data/markets.csv"
+    instruments-file: "classpath:reference-data/instruments.sample.csv"
+    exchange-mic-mapping-file: "classpath:reference-data/yahoo-exchange-to-mic-mapping.csv"
+    suffix-override-file: "classpath:reference-data/yahoo-exchange-suffix-overrides.csv"
+
 management:
   endpoints:
     web:

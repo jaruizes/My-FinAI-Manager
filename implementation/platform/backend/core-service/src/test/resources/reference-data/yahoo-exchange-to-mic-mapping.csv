@@ -1,0 +1,68 @@
+source,source_exchange_code,expected_yahoo_suffix,canonical_mic,country_iso2,currency,supported_for_fd002,rows_in_supplied_csv,market_name_or_note
+YAHOO_CSV,AMS,AS,XAMS,NL,EUR,true,153,Euronext Amsterdam
+YAHOO_CSV,ASE,,XASE,US,USD,true,843,NYSE American
+YAHOO_CSV,ASX,AX,XASX,AU,AUD,false,2146,Australian Securities Exchange
+YAHOO_CSV,ATH,AT,XATH,GR,EUR,true,238,Athens Exchange
+YAHOO_CSV,BER,BE,XBER,DE,EUR,true,6968,Berlin Stock Exchange
+YAHOO_CSV,BRU,BR,XBRU,BE,EUR,true,171,Euronext Brussels
+YAHOO_CSV,BSE,BO,XBOM,IN,INR,false,6087,BSE India
+YAHOO_CSV,BUE,BA,XBUE,AR,ARS,false,456,Buenos Aires
+YAHOO_CSV,CCS,CR,XCAR,VE,VES,false,91,Caracas Stock Exchange
+YAHOO_CSV,CNQ,CN,CNSX,CA,CAD,false,256,Canadian Securities Exchange
+YAHOO_CSV,CPH,CO,XCSE,DK,DKK,false,166,Nasdaq Copenhagen
+YAHOO_CSV,DOH,QA,XQAT,QA,QAR,false,77,Qatar Exchange
+YAHOO_CSV,DUS,DU,XDUS,DE,EUR,true,2254,Dusseldorf Stock Exchange
+YAHOO_CSV,EBS,SW,XSWX,CH,CHF,false,845,SIX Swiss Exchange
+YAHOO_CSV,ENX,,,EU,,false,95,"Generic Euronext code; resolve from Yahoo suffix, not Exchange alone"
+YAHOO_CSV,EUX,EX,,DE,EUR,false,3,Ambiguous/derivatives-oriented Yahoo code; excluded initially
+YAHOO_CSV,FRA,F,XFRA,DE,EUR,true,10087,Frankfurt Stock Exchange; .DE rows are overridden to XETR
+YAHOO_CSV,GER,DE,XETR,DE,EUR,true,993,Deutsche Boerse Xetra
+YAHOO_CSV,HAM,HM,XHAM,DE,EUR,true,1032,Hamburg Stock Exchange
+YAHOO_CSV,HAN,HA,XHAN,DE,EUR,true,458,Hanover Stock Exchange
+YAHOO_CSV,HEL,HE,XHEL,FI,EUR,true,155,Nasdaq Helsinki
+YAHOO_CSV,HKG,HK,XHKG,HK,HKD,false,1949,Hong Kong Exchanges
+YAHOO_CSV,ICE,IC,XICE,IS,ISK,false,19,Nasdaq Iceland
+YAHOO_CSV,IOB,IL,ILSE,GB,USD,true,158,London Stock Exchange International Order Book; USD only admitted by currency filter
+YAHOO_CSV,ISE,IR,XDUB,IE,EUR,true,55,Euronext Dublin / Irish Stock Exchange
+YAHOO_CSV,IST,IS,XIST,TR,TRY,false,445,Borsa Istanbul
+YAHOO_CSV,JKT,JK,XIDX,ID,IDR,false,538,Indonesia Stock Exchange
+YAHOO_CSV,KLS,KL,XKLS,MY,MYR,false,1654,Bursa Malaysia
+YAHOO_CSV,KOE,KQ,KQKS,KR,KRW,false,957,KOSDAQ
+YAHOO_CSV,KSC,KS,XKRX,KR,KRW,false,763,Korea Exchange
+YAHOO_CSV,LIS,LS,XLIS,PT,EUR,true,62,Euronext Lisbon
+YAHOO_CSV,LIT,VS,XVIL,LT,EUR,true,31,Nasdaq Vilnius
+YAHOO_CSV,LSE,L,XLON,GB,GBP,false,3944,London Stock Exchange; GBP listings excluded from FD002 initial currency scope
+YAHOO_CSV,MAD,MA,XMAD,ES,EUR,false,1,Legacy/rare Yahoo Madrid code; prefer MCE/.MC mapping
+YAHOO_CSV,MCE,MC,XMAD,ES,EUR,true,198,Bolsa de Madrid listing MIC; operating MIC BMEX
+YAHOO_CSV,MCX,ME,MISX,RU,RUB,false,311,Moscow Exchange
+YAHOO_CSV,MDD,MDD,,IT,EUR,false,1,Ambiguous legacy Italian Yahoo code; excluded initially
+YAHOO_CSV,MEX,MX,XMEX,MX,MXN,false,767,Bolsa Mexicana de Valores
+YAHOO_CSV,MIL,MI,MTAA,IT,EUR,true,385,Borsa Italiana / Euronext Milan equity listing
+YAHOO_CSV,MUN,MU,XMUN,DE,EUR,true,4213,Munich Stock Exchange
+YAHOO_CSV,NCM,,XNAS,US,USD,true,845,Nasdaq Capital Market; canonical MIC XNAS
+YAHOO_CSV,NGM,,XNAS,US,USD,true,480,Nasdaq Global Market; canonical MIC XNAS
+YAHOO_CSV,NMS,,XNAS,US,USD,true,1784,Nasdaq Global Select/Market; canonical MIC XNAS
+YAHOO_CSV,NSI,NS,XNSE,IN,INR,false,2897,National Stock Exchange of India
+YAHOO_CSV,NYQ,,XNYS,US,USD,true,3384,New York Stock Exchange
+YAHOO_CSV,NZE,NZ,XNZE,NZ,NZD,false,263,New Zealand Exchange
+YAHOO_CSV,OBB,,,US,USD,false,197,Legacy OTC Bulletin Board code; no automatic canonical MIC
+YAHOO_CSV,OSL,OL,XOSL,NO,NOK,false,231,Oslo Bors
+YAHOO_CSV,PAR,PA,XPAR,FR,EUR,true,994,Euronext Paris
+YAHOO_CSV,PCX,,ARCX,US,USD,true,35,NYSE Arca
+YAHOO_CSV,PNK,,PINX,US,USD,false,14602,OTC Pink; excluded from initial supported listed-equity universe
+YAHOO_CSV,RIS,RG,XRIS,LV,EUR,true,27,Nasdaq Riga
+YAHOO_CSV,SAO,SA,BVMF,BR,BRL,false,2109,B3 / Sao Paulo
+YAHOO_CSV,SES,SI,XSES,SG,SGD,false,978,Singapore Exchange
+YAHOO_CSV,SET,BK,XBKK,TH,THB,false,1349,Stock Exchange of Thailand
+YAHOO_CSV,SHH,SS,XSHG,CN,CNY,false,1231,Shanghai Stock Exchange
+YAHOO_CSV,SHZ,SZ,XSHE,CN,CNY,false,5,Shenzhen Stock Exchange
+YAHOO_CSV,STO,ST,XSTO,SE,SEK,false,898,Nasdaq Stockholm
+YAHOO_CSV,STU,SG,XSTU,DE,EUR,true,5444,Stuttgart Stock Exchange
+YAHOO_CSV,TAI,TW,XTAI,TW,TWD,false,669,Taiwan Stock Exchange
+YAHOO_CSV,TAL,TL,XTAL,EE,EUR,true,16,Nasdaq Tallinn
+YAHOO_CSV,TLO,TI,EUTL,IT,EUR,true,136,EuroTLX
+YAHOO_CSV,TLV,TA,XTAE,IL,ILS,false,475,Tel Aviv Stock Exchange
+YAHOO_CSV,TOR,TO,XTSE,CA,CAD,false,1663,Toronto Stock Exchange
+YAHOO_CSV,TWO,TWO,ROCO,TW,TWD,false,2031,Taipei Exchange
+YAHOO_CSV,VAN,V,XTSX,CA,CAD,false,2226,TSX Venture Exchange
+YAHOO_CSV,VIE,VI,XVIE,AT,EUR,true,99,Vienna Stock Exchange

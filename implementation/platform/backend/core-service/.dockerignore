@@ -1,0 +1,9 @@
+# Keep the Docker build context small and reproducible (EN002).
+target/
+.idea/
+*.iml
+*.log
+.git
+.gitignore
+Dockerfile
+.dockerignore
