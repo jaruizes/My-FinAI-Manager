@@ -109,6 +109,27 @@ local **Financial Instrument catalog** that FD002 searches for controlled instru
 Configuration lives under `app.reference-data.*` in `application.yml` — all values are
 `classpath:` locations of committed files; no secret, no host path.
 
+### Consumed by `portfolio` for FD002 (AR-062)
+
+The `portfolio` module validates that every Position on `POST /api/portfolios` references an active
+catalogued listing whose `ticker + market + currency` all match — otherwise the Position is rejected
+with `ValidationProblem` code `INSTRUMENT_NOT_IN_CATALOG` and nothing is persisted (FD002 FR-011).
+
+This is the one inter-module dependency (**AR-062** — inter-module reads go through a published
+port):
+
+```
+portfolio.business.CreatePortfolioService
+  └─ portfolio.domain.ports.InstrumentCatalog            (anti-corruption port, portfolio VOs only)
+       └─ portfolio.infrastructure.catalog.CatalogInstrumentCatalogAdapter   (the ONLY portfolio→financialinstrument reference)
+            └─ financialinstrument.domain.ports.FinancialInstrumentCatalog.findSelectable(ticker, mic)
+```
+
+`portfolio.domain` / `portfolio.business` never see a `financialinstrument` type; the currency
+match is completed in the adapter. Enforced by `StandardArchitectureRulesTest` (14 rules):
+`portfolio` may reference only `..financialinstrument.domain.ports..` / `..domain.model..`, only
+from `portfolio.infrastructure`.
+
 ## Tests
 
 | Location | Kind |

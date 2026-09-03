@@ -1,9 +1,9 @@
 # FD002 — Select Financial Instrument from Catalog
 
-> **Status:** Draft  
+> **Status:** Approved  
 > **Feature ID:** FD002  
 > **Feature Name:** Select Financial Instrument from Catalog  
-> **Last Updated:** 2026-09-02  
+> **Last Updated:** 2026-09-03  
 
 ---
 
@@ -511,26 +511,39 @@ The following decisions are proposed for approval in FD002:
 
 Reference-data acquisition and refresh mechanics should preferably be decided in EN004 rather than embedded as product behavior in FD002.
 
+## Open Question resolutions (2026-09-03)
+
+Resolved for formal specification (`specs/FD002-select-financial-instrument-from-catalog/`):
+
+1. **Market / Currency after instrument selection** — the Investor selects the Financial Instrument first; Market and Currency are then **constrained selectors** that offer only that instrument's real catalogued listing combinations. When an instrument has a single supported listing, its Market and Currency are applied directly. An invalid `ticker + market + currency` can never be assembled.
+2. **Multiple listings of one instrument** — each supported listing is a distinct selectable result (distinguished by MIC and currency), matching the per-listing rows returned by the EN004 catalog search.
+3. **Instrument types** — equities and ETFs. `instrumentType` is descriptive metadata only, never a search filter (aligned with EN004).
+4. **Market universe** — whatever the EN004-maintained catalog contains; FD002 mandates no specific geographic coverage. The mandatory E2E uses EN004's deterministic committed fixtures.
+5. **ISIN** — stored by EN004 when the source provides it; shown in search results when present to help disambiguation. Not entered by the Investor.
+6. **Pre-FD002 Positions** — not applicable: no capability lists or edits an existing Position, so none is re-validated against the catalog. FD002 governs new Position creation only.
+
+**Enforcement of BR-004 / AC-006** — in addition to the constrained UI, the **backend validates each Position on Portfolio creation** against the catalog and rejects any Position whose `ticker + market` is not an active listing priced in EUR or USD, with a stable machine-readable validation code (`INSTRUMENT_NOT_IN_CATALOG`). The guarantee does not depend on the client.
+
 ---
 
 # 19. Human Approval
 
 Before formal specification:
 
-- [ ] Purpose is correct.
-- [ ] Scope is correct.
-- [ ] Controlled Financial Instrument selection is approved.
-- [ ] Ticker is no longer unrestricted free text.
-- [ ] Market is no longer unrestricted free text.
-- [ ] Currency is no longer unrestricted free text.
-- [ ] EUR and USD initial scope is approved.
-- [ ] Valid catalogued `ticker + market + currency` combinations are required.
-- [ ] Existing FD001 Position identity remains `ticker + market`.
-- [ ] Frontend must not call external reference-data providers directly.
-- [ ] Provider-neutral catalog representation is approved.
-- [ ] Mandatory E2E closure gate is approved.
-- [ ] No unapproved behavior has been added.
+- [X] Purpose is correct.
+- [X] Scope is correct.
+- [X] Controlled Financial Instrument selection is approved.
+- [X] Ticker is no longer unrestricted free text.
+- [X] Market is no longer unrestricted free text.
+- [X] Currency is no longer unrestricted free text.
+- [X] EUR and USD initial scope is approved.
+- [X] Valid catalogued `ticker + market + currency` combinations are required.
+- [X] Existing FD001 Position identity remains `ticker + market`.
+- [X] Frontend must not call external reference-data providers directly.
+- [X] Provider-neutral catalog representation is approved.
+- [X] Mandatory E2E closure gate is approved.
+- [X] No unapproved behavior has been added.
 
-**Approved by:**  
-**Date:**  
-**Status:** Draft / Approved / Completed / Superseded
+**Approved by:** jaruiz  
+**Date:** 2026-09-03  
+**Status:** Approved

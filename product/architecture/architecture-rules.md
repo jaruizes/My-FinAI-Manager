@@ -1055,6 +1055,30 @@ Architecture violations must fail automated verification unless an approved ADR 
 
 ---
 
+## AR-062 — Inter-Module Reads Go Through a Published Port
+
+**MANDATORY**
+
+When one capability module needs read access to reference or query data owned by another module in
+the same deployable, it must call the owning module's **published domain port** (an application
+interface), and only from its own `infrastructure` layer. It must not:
+
+- query or map the other module's persistence entities or tables (AR-006);
+- depend on the other module's `business` or `infrastructure` packages;
+- let the other module's types reach its own `domain` or `business` packages.
+
+The consuming module should place an anti-corruption port in its own `domain.ports` and implement it
+in `infrastructure` by delegating to the owning module's published port.
+
+Approved instance: the `portfolio` module reads the `financialinstrument` catalog (to validate that
+a Position references an active, supported listing — FD002) through
+`financialinstrument.domain.ports.FinancialInstrumentCatalog`, via a
+`portfolio.infrastructure` adapter behind `portfolio.domain.ports.InstrumentCatalog`.
+
+This dependency direction must be covered by an ArchUnit rule where practical (AR-061).
+
+---
+
 # Architecture Rule Summary
 
 The architecture can be summarized through the following constraints:

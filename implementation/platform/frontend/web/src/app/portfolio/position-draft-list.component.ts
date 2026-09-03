@@ -16,6 +16,7 @@ import { FieldError, PositionDraft } from './portfolio-creation.models';
     <table class="list" *ngIf="positions.length > 0">
       <thead>
         <tr>
+          <th>Instrument</th>
           <th>Ticker</th>
           <th>Market</th>
           <th>Quantity</th>
@@ -25,6 +26,7 @@ import { FieldError, PositionDraft } from './portfolio-creation.models';
       </thead>
       <tbody>
         <tr *ngFor="let p of positions; let i = index" [attr.data-row]="i">
+          <td>{{ p.instrumentName || '—' }}</td>
           <td>{{ p.ticker }}</td>
           <td>{{ p.market }}</td>
           <td>{{ p.quantity }}</td>

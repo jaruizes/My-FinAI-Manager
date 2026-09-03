@@ -106,4 +106,18 @@ class StandardArchitectureRulesTest {
     static final ArchRule csv_parsing_is_confined_to_infrastructure =
             noClasses().that().resideOutsideOfPackage("..infrastructure..")
                     .should().dependOnClassesThat().resideInAPackage("org.apache.commons.csv..");
+
+    // FD002 / AR-062: an inter-module read (portfolio -> financialinstrument catalog) goes only
+    // through the owning module's published domain port, and only from portfolio's infrastructure.
+    @ArchTest
+    static final ArchRule portfolio_touches_financialinstrument_only_via_its_domain_ports =
+            noClasses().that().resideInAPackage("..core.portfolio..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "..core.financialinstrument.infrastructure..",
+                            "..core.financialinstrument.business..");
+
+    @ArchTest
+    static final ArchRule portfolio_core_is_free_of_financialinstrument =
+            noClasses().that().resideInAnyPackage("..core.portfolio.domain..", "..core.portfolio.business..")
+                    .should().dependOnClassesThat().resideInAPackage("..core.financialinstrument..");
 }

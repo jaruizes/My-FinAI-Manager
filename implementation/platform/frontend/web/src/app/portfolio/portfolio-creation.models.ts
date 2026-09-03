@@ -18,6 +18,12 @@ export interface PositionDraft {
   initialPurchaseDate?: string;
   /** decimal string in `currency`; omitted when the investor did not provide it (never "0") */
   averagePurchasePrice?: string;
+  /**
+   * FD002 — the selected instrument's human-readable name, for display in the draft list and to
+   * restore the dialog on edit. **Not sent to the API** (`toRequestBody` cherry-picks the wire
+   * fields), so the `POST /api/portfolios` body is byte-identical to FD001.
+   */
+  instrumentName?: string;
 }
 
 /** The whole portfolio being created. */
@@ -30,8 +36,8 @@ export interface PortfolioDraft {
 export interface FieldError {
   /** path like `name`, `positions`, `positions[1].quantity` */
   field: string;
-  /** canonical code: REQUIRED | AT_LEAST_ONE | INVALID_NUMBER | NOT_POSITIVE |
-   *  DUPLICATE_INSTRUMENT | FUTURE_DATE | CURRENCY_FORMAT | NAME_TOO_LONG */
+  /** canonical code: REQUIRED | AT_LEAST_ONE | INVALID_NUMBER | INVALID_DATE | NOT_POSITIVE |
+   *  DUPLICATE_INSTRUMENT | FUTURE_DATE | CURRENCY_FORMAT | NAME_TOO_LONG | INSTRUMENT_NOT_IN_CATALOG */
   code: string;
   message: string;
 }

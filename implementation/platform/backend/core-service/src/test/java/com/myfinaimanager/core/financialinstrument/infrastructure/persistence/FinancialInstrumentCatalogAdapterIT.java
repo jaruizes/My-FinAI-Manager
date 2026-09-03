@@ -83,6 +83,27 @@ class FinancialInstrumentCatalogAdapterIT extends PostgresContainerSupport {
         assertThat(catalog.search("NOSUCHINSTRUMENT")).isEmpty();
     }
 
+    // ---- findSelectable (FD002) ----------------------------------------------------------
+
+    @Test
+    void find_selectable_matches_ticker_case_insensitively_on_the_exact_mic() {
+        assertThat(catalog.findSelectable("AAPL", "XNAS")).hasValueSatisfying(l -> {
+            assertThat(l.ticker().value()).isEqualTo("AAPL");
+            assertThat(l.market().value()).isEqualTo("XNAS");
+            assertThat(l.currency().name()).isEqualTo("USD");
+        });
+        assertThat(catalog.findSelectable("aapl", "XNAS")).isPresent();
+        assertThat(catalog.findSelectable("SAN", "XMAD")).hasValueSatisfying(
+                l -> assertThat(l.currency().name()).isEqualTo("EUR"));
+    }
+
+    @Test
+    void find_selectable_is_empty_for_wrong_market_inactive_or_unknown() {
+        assertThat(catalog.findSelectable("AAPL", "XMAD")).isEmpty();   // right ticker, wrong market
+        assertThat(catalog.findSelectable("SC", "XNAS")).isEmpty();     // seeded but inactive
+        assertThat(catalog.findSelectable("NOSUCH", "XNAS")).isEmpty();
+    }
+
     private Market market(String mic, String name) {
         return Market.fromRaw(new NewMarket(mic, name, null, null, "true"), PROV);
     }

@@ -2,10 +2,11 @@ package com.myfinaimanager.core.financialinstrument.domain.ports;
 
 import com.myfinaimanager.core.financialinstrument.domain.model.FinancialInstrumentListing;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * Outbound port — runtime search over the local Financial Instrument catalog (FD002). Implemented
- * by a persistence adapter; the business layer depends only on this interface.
+ * Outbound port — runtime read access to the local Financial Instrument catalog (FD002).
+ * Implemented by a persistence adapter; the business layer depends only on this interface.
  * See {@code contracts/catalog-ports.md} §1 for the invariants (C1–C7).
  */
 public interface FinancialInstrumentCatalog {
@@ -20,4 +21,15 @@ public interface FinancialInstrumentCatalog {
      * @return possibly empty, never {@code null}
      */
     List<FinancialInstrumentListing> search(String query);
+
+    /**
+     * The one <strong>selectable</strong> listing with exactly this {@code ticker}
+     * (case-insensitive) on exactly this {@code marketMic}, or empty — the exact-match counterpart
+     * of {@link #search(String)}. "Selectable" = {@code active == true} AND
+     * {@code currency ∈ {EUR, USD}}. The returned listing carries its currency; a caller that must
+     * also match a submitted currency does that comparison itself (FD002 FR-011;
+     * {@code specs/FD002-…/contracts/instrument-catalog-port.md} C2). Local PostgreSQL only — never
+     * contacts an external provider. At most one result ({@code (ticker, market_mic)} is unique).
+     */
+    Optional<FinancialInstrumentListing> findSelectable(String ticker, String marketMic);
 }

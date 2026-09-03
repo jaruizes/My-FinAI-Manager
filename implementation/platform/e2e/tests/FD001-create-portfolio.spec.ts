@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { addPositionFromCatalog } from '../support/add-position';
 import { syntheticPosition, uniquePortfolioName } from '../support/data';
 
 /**
@@ -36,19 +37,15 @@ test('E2E-001: an Investor creates a portfolio with one position and sees the co
   // 2. Enter a portfolio name.
   await page.locator('input[formControlName="name"]').fill(portfolioName);
 
-  // 3. Add one valid position via the dialog.
-  await page.locator('.positions__header').getByRole('button', { name: 'Add position' }).click();
-
-  const dialog = page.getByRole('dialog', { name: 'Add position' });
-  await expect(dialog).toBeVisible();
-  await dialog.locator('input[formControlName="ticker"]').fill(position['ticker']);
-  await dialog.locator('input[formControlName="market"]').fill(position['market']);
-  await dialog.locator('input[formControlName="quantity"]').fill(position['quantity']);
-  await dialog.locator('input[formControlName="currency"]').fill(position['currency']);
-  await dialog.getByRole('button', { name: 'Add position' }).click();
+  // 3. Add one valid position by selecting a catalogued instrument (FD002 changed the input
+  //    mechanism; the FD001 outcome — a persisted portfolio + confirmation — is unchanged).
+  await addPositionFromCatalog(page, {
+    search: position['ticker'],
+    optionText: `${position['ticker']} · ${position['market']} · ${position['currency']}`,
+    quantity: position['quantity'],
+  });
 
   // 4. The draft list shows the position; Save is now enabled.
-  await expect(dialog).toBeHidden();
   const draftRow = page.locator('app-position-draft-list tbody tr');
   await expect(draftRow).toHaveCount(1);
   await expect(draftRow.first()).toContainText(position['ticker']);

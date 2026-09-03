@@ -111,6 +111,17 @@ paths:
                       - field: positions[1]
                         code: DUPLICATE_INSTRUMENT
                         message: A position for ASML on XAMS already exists in this portfolio.
+                notInCatalog:
+                  summary: A position references an instrument/market/currency that is not a selectable catalogued listing (FD002)
+                  value:
+                    type: /problems/portfolio-validation
+                    title: Portfolio could not be validated
+                    status: 400
+                    detail: The portfolio has 1 problem that needs to be fixed.
+                    errors:
+                      - field: positions[0]
+                        code: INSTRUMENT_NOT_IN_CATALOG
+                        message: AAPL on XMAD in EUR is not a selectable instrument.
         '415':
           description: Unsupported media type.
           content:
@@ -398,6 +409,13 @@ components:
                   - FUTURE_DATE
                   - CURRENCY_FORMAT
                   - NAME_TOO_LONG
-                description: Stable machine token identifying the rule that failed. Canonical list of FD001 validation codes.
+                  - INSTRUMENT_NOT_IN_CATALOG
+                description: >
+                  Stable machine token identifying the rule that failed. `REQUIRED` … `NAME_TOO_LONG`
+                  are the FD001 structural/business codes. `INSTRUMENT_NOT_IN_CATALOG` (FD002) means
+                  the position's `ticker + market + currency` does not, as a whole, correspond to one
+                  active Financial Instrument listing in the platform catalog — the instrument is
+                  unknown, inactive, on a different market, or the submitted currency differs from the
+                  listing's currency.
               message:
                 type: string

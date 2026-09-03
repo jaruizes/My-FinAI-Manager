@@ -45,6 +45,16 @@ public class FinancialInstrumentCatalogAdapter implements FinancialInstrumentCat
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<FinancialInstrumentListing> findSelectable(String ticker, String marketMic) {
+        // currency ∈ {EUR, USD} is guaranteed by the domain type (SupportedCurrency) and the
+        // fin_instr_currency_chk constraint; only `active` needs a runtime filter here.
+        return instruments.findByTickerIgnoreCaseAndMarketMic(ticker, marketMic)
+                .map(mapper::toDomain)
+                .filter(FinancialInstrumentListing::active);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<Market> findByMic(Mic mic) {
         return markets.findById(mic.value()).map(mapper::toDomain);
     }

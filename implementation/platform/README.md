@@ -73,12 +73,19 @@ deliberately small and journey-focused (`product/engineering/testing-strategy.md
 | Capability | Entry point | Reference |
 |------------|-------------|-----------|
 | Create investment portfolio | frontend `/portfolios/new` · `POST /api/portfolios` | `specs/FD001-create-investment-portfolio/quickstart.md` |
+| Select Financial Instrument from catalog (Add Position) | frontend `/portfolios/new` Add Position — search + select · `GET /api/financial-instruments?query=` | `specs/FD002-select-financial-instrument-from-catalog/quickstart.md` |
 | Search the Financial Instrument catalog | `GET /api/financial-instruments?query=` | `specs/EN004-establish-financial-instrument-reference-data/quickstart.md` |
 
 The external REST contract is `contracts/openapi/openapi.yaml` (OpenAPI 3.0.3). Portfolio data
 lives in the `investor` / `portfolio` / `position` tables created by Flyway migration
 `V2__portfolio.sql` (a single "Default Investor" is seeded — FD001 has no authentication yet; see
 `product/architecture/adrs/ADR-002-interim-unauthenticated-write-access.md`).
+
+**FD002** replaced the free-text ticker/market/currency inputs in Add Position with a catalog
+search-and-select. A Position may only reference an active EUR/USD catalogued listing — the frontend
+constrains the choice and the backend re-validates every Position on `POST /api/portfolios`
+(`ValidationProblem` code `INSTRUMENT_NOT_IN_CATALOG`). No schema change; the FD001 request body and
+Position identity are unchanged.
 
 The Financial Instrument catalog (`market` / `financial_instrument` tables — Flyway
 `V3__financial_instrument.sql`) is populated on backend start from committed reference data under

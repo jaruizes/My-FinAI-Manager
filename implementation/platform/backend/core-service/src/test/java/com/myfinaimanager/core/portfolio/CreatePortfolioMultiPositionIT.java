@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,17 @@ import org.springframework.http.ResponseEntity;
  * </ul>
  */
 class CreatePortfolioMultiPositionIT extends AbstractPortfolioIT {
+
+    /** The "many positions" test invents synthetic tickers — catalogue them so FR-011 passes. */
+    @BeforeEach
+    void seedSyntheticListings() {
+        for (int i = 0; i < 12; i++) {
+            jdbc.sql("INSERT INTO financial_instrument (id, name, ticker, market_mic, currency, active) "
+                            + "VALUES (gen_random_uuid(), :n, :t, 'XAMS', 'EUR', true) "
+                            + "ON CONFLICT (ticker, market_mic) DO NOTHING")
+                    .param("n", "Synthetic Instrument " + i).param("t", "TIC" + i).update();
+        }
+    }
 
     @Test
     void several_distinct_positions_persist_under_one_portfolio() { // AC-002
