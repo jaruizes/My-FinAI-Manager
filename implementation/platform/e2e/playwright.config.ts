@@ -9,6 +9,10 @@ import { defineConfig, devices } from '@playwright/test';
  * - Chromium only for the initial baseline (OD-4).
  * - Diagnostics (OD-8): screenshot + trace on failure only; video off. Artifacts under
  *   `test-results/` (git-ignored, bind-mounted to the host by `e2e.sh`).
+ * - FD003: `e2e.sh` gives one disposable database per run. The `portfolio-empty` project runs the
+ *   empty-state check (E2E-002) and the `chromium` project declares `dependencies: ['portfolio-empty']`
+ *   so Playwright guarantees the empty-state spec completes on the fresh, empty database before any
+ *   portfolio-creating spec runs (declaration order alone is not a Playwright ordering guarantee).
  */
 export default defineConfig({
   testDir: './tests',
@@ -33,7 +37,14 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'portfolio-empty',
+      testMatch: /fd003-portfolio-empty\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'chromium',
+      testIgnore: /fd003-portfolio-empty\.spec\.ts$/,
+      dependencies: ['portfolio-empty'],
       use: { ...devices['Desktop Chrome'] },
     },
   ],

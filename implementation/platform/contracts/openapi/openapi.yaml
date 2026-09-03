@@ -6,9 +6,12 @@ info:
     External business API for My-FinAI-Manager.
 
     FD001 — Create Investment Portfolio adds `POST /api/portfolios`.
+    FD003 — List and View Portfolio Details adds `GET /api/portfolios` (the current investor's
+    saved portfolios, newest first) and `GET /api/portfolios/{portfolioId}` (one portfolio with
+    its positions). Both are read-only — no sorting, filtering, searching, or pagination.
     EN004 — Establish Financial Instrument Reference Data adds `GET /api/financial-instruments`
     (the catalog search FD002 uses for controlled instrument selection).
-    Listing, viewing, editing, valuation, risk and recommendations are not part of this version.
+    Editing, valuation, risk and recommendations are not part of this version.
     Operational backend/database health is exposed via the Spring Boot Actuator health mechanism at
     `/actuator/health` and is intentionally not modelled here.
 servers:
@@ -141,6 +144,83 @@ paths:
                     title: Portfolio could not be saved
                     status: 503
                     detail: We could not save your portfolio right now. Please try again.
+    get:
+      operationId: listPortfolios
+      tags: [Portfolio]
+      summary: List the current investor's saved portfolios
+      description: >
+        Returns every portfolio persisted for the current investor, most-recently-created first.
+        Each item carries only the portfolio identifier, its name, and the number of positions it
+        currently contains — not the positions themselves (use the detail operation for those). An
+        investor with no saved portfolios gets `200` with an empty array (never `404`). No sorting,
+        filtering, searching, or pagination.
+      responses:
+        '200':
+          description: Zero or more portfolio summaries, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PortfolioSummary'
+              examples:
+                two:
+                  summary: Two saved portfolios
+                  value:
+                    - id: 6f9619ff-8b86-4d11-b42d-00c04fc964ff
+                      name: Long Term Investment
+                      positionCount: 8
+                    - id: 2b1c3d4e-5f60-4a71-8293-a4b5c6d7e8f9
+                      name: Technology
+                      positionCount: 4
+                none:
+                  summary: No portfolios — empty array, not 404
+                  value: []
+
+  /api/portfolios/{portfolioId}:
+    get:
+      operationId: getPortfolio
+      tags: [Portfolio]
+      summary: Get a portfolio and its persisted positions
+      description: >
+        Returns the selected portfolio (name, status, creation time) and one entry per persisted
+        position (ticker, market/MIC, quantity, currency, and the initial purchase date / average
+        purchase price when the position has them). Read-only — nothing about the portfolio can be
+        changed through this operation. A well-formed portfolio id that is not the current
+        investor's yields `404`; a `{portfolioId}` segment that is not a valid UUID yields `400`.
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          description: >
+            The portfolio identifier from the list operation. Must be a UUID — a non-UUID segment
+            is rejected with `400` before any lookup.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The portfolio and its positions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400':
+          description: >
+            The `{portfolioId}` path segment is not a valid identifier (not a UUID). Rejected
+            before any lookup; the body carries no guaranteed problem `type`.
+        '404':
+          description: No portfolio with this id belongs to the current investor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: /problems/portfolio-not-found
+                title: Portfolio not found
+                status: 404
+                detail: No portfolio with that identifier exists.
+                instance: /api/portfolios/6f9619ff-8b86-4d11-b42d-00c04fc964ff
 
   /api/financial-instruments:
     get:
@@ -299,6 +379,24 @@ components:
             amount — zero/negative is rejected as a ValidationProblem (code NOT_POSITIVE). Omit
             the field entirely when unknown — it is never inferred or defaulted.
           example: "812.50"
+
+    PortfolioSummary:
+      type: object
+      additionalProperties: false
+      description: A portfolio as shown in the Home list — identity, name, and position count only.
+      required: [id, name, positionCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Portfolio identifier — used to open the detail.
+        name:
+          type: string
+          description: The investor-chosen portfolio name.
+        positionCount:
+          type: integer
+          minimum: 0
+          description: Number of positions currently persisted for this portfolio.
 
     Portfolio:
       type: object

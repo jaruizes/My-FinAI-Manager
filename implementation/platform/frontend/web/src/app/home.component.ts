@@ -1,30 +1,15 @@
 import { Component } from '@angular/core';
+import { PortfolioListComponent } from './portfolio/portfolio-list.component';
 
 /**
- * Placeholder landing view for the default route (EN001). Deliberately empty of product content —
- * it only proves the shell renders a non-blank content area. FD001 replaces / adds real views.
+ * The default route (`''`). Since FD003 the Home page shows the investor's saved portfolios
+ * (FD003 §17.1) — it hosts {@link PortfolioListComponent}. `HomeComponent` stays as the route
+ * host so the route registration is stable.
  */
 @Component({
   selector: 'app-home',
   standalone: true,
-  template: `
-    <section class="home-placeholder">
-      <h1>My-FinAI-Manager</h1>
-      <p>Platform baseline is running. No features are available yet.</p>
-    </section>
-  `,
-  styles: [
-    `
-      .home-placeholder {
-        padding: var(--spacing-lg);
-        color: var(--color-text-secondary);
-      }
-      h1 {
-        margin: 0 0 var(--spacing-sm);
-        font-size: var(--font-size-page-title);
-        color: var(--color-text-primary);
-      }
-    `,
-  ],
+  imports: [PortfolioListComponent],
+  template: `<app-portfolio-list />`,
 })
 export class HomeComponent {}

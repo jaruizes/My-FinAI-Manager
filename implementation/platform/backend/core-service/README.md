@@ -29,8 +29,8 @@ com.myfinaimanager.core
     ├── domain/
     │   ├── model/                   value objects, entities, aggregate root (Portfolio, Position, Money, …)
     │   ├── ports/                   outbound port interfaces (PortfolioRepository, DefaultInvestorProvider)
-    │   └── exceptions/              domain-observable failures (PortfolioValidationException, PortfolioNotSavedException)
-    ├── business/                    use-case API + orchestration (CreatePortfolioUseCase, CreatePortfolioService @Service)
+    │   └── exceptions/              domain-observable failures (PortfolioValidationException, PortfolioNotSavedException, PortfolioNotFoundException)
+    ├── business/                    use-case API + orchestration (CreatePortfolioUseCase/Service @Service; PortfolioQueryUseCase/Service @Service — FD003 read-only)
     └── infrastructure/
         ├── api/
         │   └── rest/                @RestController + @RestControllerAdvice
@@ -61,7 +61,18 @@ abstraction. The `portfolio` module:
   a fresh transaction, and translates any other integrity/transient failure to
   `PortfolioNotSavedException`.
 - `infrastructure.persistence.repository.PortfolioJpaRepository` — `JpaRepository`, derived queries
-  only (`findByIdempotencyKey` with `@EntityGraph`). No JPQL, no native SQL.
+  only (`findByIdempotencyKey`; FD003 adds `findAllByInvestorIdOrderByCreatedAtDescIdDesc` and
+  `findByIdAndInvestorId`, all with `@EntityGraph`). No JPQL, no native SQL.
+- **FD003 read path** (read-only): `PortfolioQueryService` resolves the Default Investor and calls
+  `PortfolioRepository.findAllByInvestor` / `findByIdForInvestor` (scoping is in the query, never a
+  post-filter; the adapter runs them on its `readOnly` transaction template — an IT asserts row
+  counts are unchanged). `PortfolioQueryController` (`@RestController`, separate from
+  `CreatePortfolioController`) serves `GET /api/portfolios` → `PortfolioSummaryResponse`
+  `{id,name,positionCount}` and `GET /api/portfolios/{portfolioId}` → the existing
+  `CreatePortfolioResponse` (`Portfolio` schema); the `{portfolioId}` path variable is typed `UUID`
+  so a non-UUID segment is Spring's default `400`. `PortfolioNotFoundException` →
+  `PortfolioExceptionHandler` `404` `/problems/portfolio-not-found` (the advice's `assignableTypes`
+  now covers both controllers; the FD001 `400`/`503` handlers are unchanged). No write path.
 - `infrastructure.persistence.entity.{PortfolioEntity,PositionEntity,InvestorEntity}` — JPA mapping
   onto the **existing** tables. Decimal columns declare no `precision`/`scale` so the investor's
   exact input scale round-trips.

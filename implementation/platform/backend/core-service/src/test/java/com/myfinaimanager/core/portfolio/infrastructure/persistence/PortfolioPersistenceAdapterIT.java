@@ -46,6 +46,8 @@ class PortfolioPersistenceAdapterIT extends PostgresContainerSupport {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
     private static final InvestorId INVESTOR =
             InvestorId.of(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+    private static final InvestorId OTHER_INVESTOR =
+            InvestorId.of(UUID.fromString("00000000-0000-0000-0000-0000000000ff"));
 
     @Autowired
     private PortfolioRepository repository;
@@ -57,10 +59,19 @@ class PortfolioPersistenceAdapterIT extends PostgresContainerSupport {
     void clean() {
         jdbc.sql("DELETE FROM position").update();
         jdbc.sql("DELETE FROM portfolio").update();
+        jdbc.sql("INSERT INTO investor (id, display_name, preferred_currency) "
+                        + "VALUES (:id, 'Other Investor', 'USD') ON CONFLICT (id) DO NOTHING")
+                .param("id", OTHER_INVESTOR.value()).update();
     }
 
     private static Portfolio portfolio(String name, NewPosition... positions) {
         return Portfolio.create(INVESTOR, name, List.of(positions), CLOCK);
+    }
+
+    private static Portfolio portfolioAt(String isoInstant, InvestorId investor, String name,
+                                         NewPosition... positions) {
+        return Portfolio.create(investor, name, List.of(positions),
+                Clock.fixed(Instant.parse(isoInstant), ZoneOffset.UTC));
     }
 
     private static Position rebuiltPosition(String ticker, String market, String quantity) {
@@ -144,6 +155,70 @@ class PortfolioPersistenceAdapterIT extends PostgresContainerSupport {
             }
         }).doesNotThrowAnyException();
         assertThat(loaded.positions()).hasSize(2);
+    }
+
+    // ---- FD003 read queries -------------------------------------------------------------------
+
+    @Test
+    void findAllByInvestor_returns_only_that_investors_portfolios_newest_first_with_positions() {
+        Portfolio older = portfolioAt("2026-09-01T10:00:00Z", INVESTOR, "Older",
+                new NewPosition("ASML", "XAMS", "1", "EUR", null, null));
+        Portfolio newer = portfolioAt("2026-09-02T10:00:00Z", INVESTOR, "Newer",
+                new NewPosition("ASML", "XAMS", "2", "EUR", null, null),
+                new NewPosition("MSFT", "XNAS", "3", "USD", null, null),
+                new NewPosition("SAP", "XETR", "4", "EUR", null, null));
+        Portfolio foreign = portfolioAt("2026-09-03T10:00:00Z", OTHER_INVESTOR, "Foreign",
+                new NewPosition("ASML", "XAMS", "5", "EUR", null, null),
+                new NewPosition("MSFT", "XNAS", "6", "USD", null, null));
+        repository.save(older, "fd003-older");
+        repository.save(newer, "fd003-newer");
+        repository.save(foreign, "fd003-foreign");
+
+        List<Portfolio> mine = repository.findAllByInvestor(INVESTOR);
+
+        assertThat(mine).extracting(p -> p.name().value()).containsExactly("Newer", "Older");
+        assertThat(mine).noneMatch(p -> p.id().equals(foreign.id()));
+        assertThat(mine.get(0).positions()).hasSize(3);
+        assertThat(mine.get(1).positions()).hasSize(1);
+    }
+
+    @Test
+    void findAllByInvestor_returns_empty_when_the_investor_has_no_portfolios() {
+        assertThat(repository.findAllByInvestor(INVESTOR)).isEmpty();
+    }
+
+    @Test
+    void findByIdForInvestor_returns_the_aggregate_only_for_its_owner() {
+        Portfolio mine = portfolioAt("2026-09-01T10:00:00Z", INVESTOR, "Mine",
+                new NewPosition("ASML", "XAMS", "1", "EUR", null, null),
+                new NewPosition("MSFT", "XNAS", "2", "USD", null, null));
+        Portfolio foreign = portfolioAt("2026-09-02T10:00:00Z", OTHER_INVESTOR, "Foreign",
+                new NewPosition("ASML", "XAMS", "9", "EUR", null, null));
+        repository.save(mine, "fd003-mine");
+        repository.save(foreign, "fd003-foreign2");
+
+        assertThat(repository.findByIdForInvestor(mine.id(), INVESTOR)).hasValueSatisfying(p -> {
+            assertThat(p.name().value()).isEqualTo("Mine");
+            assertThat(p.positions()).hasSize(2);
+        });
+        assertThat(repository.findByIdForInvestor(foreign.id(), INVESTOR)).isEmpty();
+        assertThat(repository.findByIdForInvestor(PortfolioId.of(UUID.randomUUID()), INVESTOR)).isEmpty();
+    }
+
+    @Test
+    void the_read_queries_write_nothing() { // SC-005
+        Portfolio p = portfolioAt("2026-09-01T10:00:00Z", INVESTOR, "ReadOnly",
+                new NewPosition("ASML", "XAMS", "1", "EUR", null, null),
+                new NewPosition("MSFT", "XNAS", "2", "USD", null, null));
+        repository.save(p, "fd003-ro");
+        long portfoliosBefore = count("portfolio");
+        long positionsBefore = count("position");
+
+        repository.findAllByInvestor(INVESTOR);
+        repository.findByIdForInvestor(p.id(), INVESTOR);
+
+        assertThat(count("portfolio")).isEqualTo(portfoliosBefore);
+        assertThat(count("position")).isEqualTo(positionsBefore);
     }
 
     private long count(String table) {

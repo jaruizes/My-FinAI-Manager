@@ -1,5 +1,6 @@
 package com.myfinaimanager.core.portfolio.infrastructure.api.rest;
 
+import com.myfinaimanager.core.portfolio.domain.exceptions.PortfolioNotFoundException;
 import com.myfinaimanager.core.portfolio.domain.exceptions.PortfolioNotSavedException;
 import com.myfinaimanager.core.portfolio.domain.exceptions.PortfolioValidationException;
 import com.myfinaimanager.core.portfolio.domain.model.Violation;
@@ -17,8 +18,20 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * readable {@code type} identifiers; human-readable, non-technical messages; no stack traces, SQL,
  * or framework class names leak (DR-020).
  */
-@RestControllerAdvice(assignableTypes = CreatePortfolioController.class)
+@RestControllerAdvice(assignableTypes = {
+        CreatePortfolioController.class,
+        PortfolioQueryController.class})
 public class PortfolioExceptionHandler {
+
+    @ExceptionHandler(PortfolioNotFoundException.class)
+    public ProblemDetail onNotFound(PortfolioNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        problem.setType(URI.create("/problems/portfolio-not-found"));
+        problem.setTitle("Portfolio not found");
+        problem.setDetail("No portfolio with that identifier exists.");
+        problem.setInstance(URI.create("/api/portfolios/" + ex.portfolioId()));
+        return problem;
+    }
 
     @ExceptionHandler(PortfolioValidationException.class)
     public ProblemDetail onValidation(PortfolioValidationException ex) {

@@ -24,10 +24,11 @@ test('the platform shell loads and is interactive', async ({ page }) => {
   await expect(page.locator('app-sidebar')).toBeVisible();
   await expect(page.locator('app-top-bar')).toBeVisible();
 
-  // Routing config loaded: the first product capability's nav entry is present and clickable.
+  // Routing config loaded: the primary nav entry is present and clickable. Since FD003 it points
+  // at Home (`/`), where the investor's portfolios are listed.
   const portfoliosNav = page.getByRole('link', { name: 'Portfolios' });
   await expect(portfoliosNav).toBeVisible();
-  await expect(portfoliosNav).toHaveAttribute('href', '/portfolios/new');
+  await expect(portfoliosNav).toHaveAttribute('href', '/');
 
   // No uncaught runtime error fired while the shell loaded.
   expect(pageErrors, `page errors: ${pageErrors.join(' | ')}`).toHaveLength(0);

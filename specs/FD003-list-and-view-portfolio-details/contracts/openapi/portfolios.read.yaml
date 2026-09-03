@@ -1,0 +1,174 @@
+# FD003 — List and View Portfolio Details
+#
+# The two read operations FD003 adds to the platform's external business API. During implementation
+# these are MERGED into implementation/platform/contracts/openapi/openapi.yaml. Business language
+# only, no persistence/provider leakage (AR-010, AR-011). Errors follow RFC 9457
+# `application/problem+json` (AR-012).
+#
+# Dialect: OpenAPI 3.0.3 — matches the swagger-request-validator used by the contract tests.
+#
+# REUSES the existing `Portfolio`, `Position`, and `Problem` schemas already defined in openapi.yaml
+# (FD001). Adds ONE new schema: `PortfolioSummary`.
+
+openapi: 3.0.3
+info:
+  title: My-FinAI-Manager Platform API
+  version: 0.1.0
+  description: >
+    Adds read access to the current Investor's Portfolios (`GET /api/portfolios`) and to a selected
+    Portfolio's detail with its Positions (`GET /api/portfolios/{portfolioId}`) — FD003. Read-only:
+    no listing controls (sorting/filtering/pagination), no mutation.
+
+paths:
+  /api/portfolios:
+    get:
+      operationId: listPortfolios
+      tags: [Portfolio]
+      summary: List the current Investor's saved Portfolios
+      description: >
+        Returns every Portfolio persisted for the current Investor, most-recently-created first.
+        Each item carries only the Portfolio identifier, its name, and the number of Positions it
+        currently contains — not the Positions themselves (use the detail operation for those). An
+        Investor with no saved Portfolios gets `200` with an empty array (not `404`). No sorting,
+        filtering, searching, or pagination.
+      responses:
+        '200':
+          description: Zero or more Portfolio summaries, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PortfolioSummary'
+              examples:
+                two:
+                  summary: Two saved Portfolios
+                  value:
+                    - id: 6f9619ff-8b86-4d11-b42d-00c04fc964ff
+                      name: Long Term Investment
+                      positionCount: 8
+                    - id: 2b1c3d4e-5f60-4a71-8293-a4b5c6d7e8f9
+                      name: Technology
+                      positionCount: 4
+                none:
+                  summary: No Portfolios — empty array, not 404
+                  value: []
+
+  /api/portfolios/{portfolioId}:
+    get:
+      operationId: getPortfolio
+      tags: [Portfolio]
+      summary: Get a Portfolio and its persisted Positions
+      description: >
+        Returns the selected Portfolio (name, status, creation time) and one entry per persisted
+        Position (ticker, market/MIC, quantity, currency, and the initial purchase date / average
+        purchase price when the Position has them). Read-only — nothing about the Portfolio can be
+        changed through this operation. A well-formed Portfolio id that is not the current Investor's
+        yields `404`; a `{portfolioId}` segment that is not a valid UUID yields `400`.
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          description: >
+            The Portfolio identifier from the list operation. Must be a UUID — a non-UUID segment is
+            rejected with `400` before any lookup.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The Portfolio and its Positions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+              example:
+                id: 6f9619ff-8b86-4d11-b42d-00c04fc964ff
+                name: Long Term Investment
+                status: ACTIVE
+                createdAt: "2026-09-03T09:15:00Z"
+                positions:
+                  - id: 11111111-1111-4111-8111-111111111111
+                    ticker: AAPL
+                    market: XNAS
+                    quantity: "10"
+                    currency: USD
+                    initialPurchaseDate: "2025-01-10"
+                    averagePurchasePrice: "185.00"
+                  - id: 22222222-2222-4222-8222-222222222222
+                    ticker: SAN
+                    market: XMAD
+                    quantity: "50"
+                    currency: EUR
+        '400':
+          description: >
+            The `{portfolioId}` path segment is not a valid identifier (not a UUID). Rejected before
+            any lookup. The body is a client error; a specific problem `type` is not guaranteed.
+        '404':
+          description: No Portfolio with this id belongs to the current Investor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: /problems/portfolio-not-found
+                title: Portfolio not found
+                status: 404
+                detail: No portfolio with that identifier exists.
+                instance: /api/portfolios/6f9619ff-8b86-4d11-b42d-00c04fc964ff
+
+components:
+  schemas:
+    PortfolioSummary:
+      type: object
+      additionalProperties: false
+      description: A Portfolio as shown in the Home list — identity, name, and Position count only.
+      required: [id, name, positionCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Portfolio identifier — used to open the detail.
+        name:
+          type: string
+          description: The investor-chosen Portfolio name.
+        positionCount:
+          type: integer
+          minimum: 0
+          description: Number of Positions currently persisted for this Portfolio.
+
+    # `Portfolio`, `Position`, and `Problem` are already defined in openapi.yaml (FD001) — the merge
+    # REUSES them. Repeated here only so this fragment validates standalone.
+    Portfolio:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, positions, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [ACTIVE] }
+        positions:
+          type: array
+          items: { $ref: '#/components/schemas/Position' }
+        createdAt: { type: string, format: date-time }
+    Position:
+      type: object
+      additionalProperties: false
+      required: [id, ticker, market, quantity, currency]
+      properties:
+        id: { type: string, format: uuid }
+        ticker: { type: string }
+        market: { type: string }
+        quantity: { type: string }
+        currency: { type: string }
+        initialPurchaseDate: { type: string, format: date, nullable: true }
+        averagePurchasePrice: { type: string, nullable: true }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

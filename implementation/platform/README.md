@@ -74,6 +74,7 @@ deliberately small and journey-focused (`product/engineering/testing-strategy.md
 |------------|-------------|-----------|
 | Create investment portfolio | frontend `/portfolios/new` · `POST /api/portfolios` | `specs/FD001-create-investment-portfolio/quickstart.md` |
 | Select Financial Instrument from catalog (Add Position) | frontend `/portfolios/new` Add Position — search + select · `GET /api/financial-instruments?query=` | `specs/FD002-select-financial-instrument-from-catalog/quickstart.md` |
+| List and view portfolio details | frontend **Home (`/`)** lists saved portfolios; a row opens `/portfolios/:id` · `GET /api/portfolios` · `GET /api/portfolios/{portfolioId}` | `specs/FD003-list-and-view-portfolio-details/quickstart.md` |
 | Search the Financial Instrument catalog | `GET /api/financial-instruments?query=` | `specs/EN004-establish-financial-instrument-reference-data/quickstart.md` |
 
 The external REST contract is `contracts/openapi/openapi.yaml` (OpenAPI 3.0.3). Portfolio data
@@ -86,6 +87,13 @@ search-and-select. A Position may only reference an active EUR/USD catalogued li
 constrains the choice and the backend re-validates every Position on `POST /api/portfolios`
 (`ValidationProblem` code `INSTRUMENT_NOT_IN_CATALOG`). No schema change; the FD001 request body and
 Position identity are unchanged.
+
+**FD003** made the saved portfolios visible: **Home (`/`) now renders the portfolio list** (name +
+position count, newest first) with an empty state and a "Create portfolio" action; a row opens the
+read-only detail at `/portfolios/:id`. Two new **read-only** endpoints — `GET /api/portfolios`
+(returns the lean `PortfolioSummary`) and `GET /api/portfolios/{portfolioId}` (returns the existing
+`Portfolio` schema; `404` `/problems/portfolio-not-found` for an unknown id, `400` for a non-UUID
+id). No schema migration, no write path, no new business event.
 
 The Financial Instrument catalog (`market` / `financial_instrument` tables — Flyway
 `V3__financial_instrument.sql`) is populated on backend start from committed reference data under

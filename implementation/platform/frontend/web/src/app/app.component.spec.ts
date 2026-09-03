@@ -1,3 +1,5 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AppComponent } from './app.component';
@@ -7,7 +9,7 @@ describe('AppComponent (application shell)', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AppComponent],
-      providers: [provideRouter(routes)],
+      providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
   });
 
@@ -26,13 +28,13 @@ describe('AppComponent (application shell)', () => {
     expect(host.querySelector('app-top-bar')).not.toBeNull();
   });
 
-  it('exposes the Portfolios navigation entry (FD001 — the first product capability)', () => {
+  it('exposes the Portfolios navigation entry pointing at Home (FD003 — Portfolios live on Home)', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     const host: HTMLElement = fixture.nativeElement;
 
     const navLinks = Array.from(host.querySelectorAll('app-sidebar a')) as HTMLAnchorElement[];
     expect(navLinks.map((a) => a.textContent?.trim())).toContain('Portfolios');
-    expect(navLinks.some((a) => a.getAttribute('href') === '/portfolios/new')).toBeTrue();
+    expect(navLinks.some((a) => a.getAttribute('href') === '/')).toBeTrue();
   });
 });

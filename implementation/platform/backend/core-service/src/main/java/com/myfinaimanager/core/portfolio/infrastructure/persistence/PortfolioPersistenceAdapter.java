@@ -1,11 +1,14 @@
 package com.myfinaimanager.core.portfolio.infrastructure.persistence;
 
 import com.myfinaimanager.core.portfolio.domain.exceptions.PortfolioNotSavedException;
+import com.myfinaimanager.core.portfolio.domain.model.InvestorId;
 import com.myfinaimanager.core.portfolio.domain.model.Portfolio;
+import com.myfinaimanager.core.portfolio.domain.model.PortfolioId;
 import com.myfinaimanager.core.portfolio.domain.ports.PortfolioRepository;
 import com.myfinaimanager.core.portfolio.infrastructure.persistence.entity.PortfolioEntity;
 import com.myfinaimanager.core.portfolio.infrastructure.persistence.mapper.PortfolioPersistenceMapper;
 import com.myfinaimanager.core.portfolio.infrastructure.persistence.repository.PortfolioJpaRepository;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -46,6 +49,20 @@ public class PortfolioPersistenceAdapter implements PortfolioRepository {
     public Optional<Portfolio> findByIdempotencyKey(String idempotencyKey) {
         return readOnlyTemplate.execute(status ->
                 portfolios.findByIdempotencyKey(idempotencyKey).map(mapper::toDomain));
+    }
+
+    @Override
+    public List<Portfolio> findAllByInvestor(InvestorId investorId) {
+        return readOnlyTemplate.execute(status ->
+                portfolios.findAllByInvestorIdOrderByCreatedAtDescIdDesc(investorId.value()).stream()
+                        .map(mapper::toDomain)
+                        .toList());
+    }
+
+    @Override
+    public Optional<Portfolio> findByIdForInvestor(PortfolioId id, InvestorId investorId) {
+        return readOnlyTemplate.execute(status ->
+                portfolios.findByIdAndInvestorId(id.value(), investorId.value()).map(mapper::toDomain));
     }
 
     @Override

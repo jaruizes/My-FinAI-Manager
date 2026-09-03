@@ -5,8 +5,8 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
  * Persistent left navigation.
  *
  * Per `product/ux/design-system.md`, the sidebar MUST NOT expose navigation for capabilities that
- * do not exist yet. FD001 adds the first product capability — creating a portfolio — so the
- * "Portfolios" entry appears now.
+ * do not exist yet. Since FD003 the "Portfolios" entry points at Home (`/`), where the investor's
+ * saved portfolios are listed; the list page carries the "Create portfolio" action.
  */
 @Component({
   selector: 'app-sidebar',
@@ -18,8 +18,9 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       <nav class="sidebar__nav" aria-label="Primary">
         <a
           class="sidebar__link"
-          routerLink="/portfolios/new"
+          routerLink="/"
           routerLinkActive="sidebar__link--active"
+          [routerLinkActiveOptions]="{ exact: true }"
         >
           Portfolios
         </a>
