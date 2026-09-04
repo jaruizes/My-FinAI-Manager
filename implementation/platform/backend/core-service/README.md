@@ -30,13 +30,16 @@ com.myfinaimanager.core
     │   ├── model/                   value objects, entities, aggregate root (Portfolio, Position, Money, …)
     │   ├── ports/                   outbound port interfaces (PortfolioRepository, DefaultInvestorProvider)
     │   └── exceptions/              domain-observable failures (PortfolioValidationException, PortfolioNotSavedException, PortfolioNotFoundException)
-    ├── business/                    use-case API + orchestration (CreatePortfolioUseCase/Service @Service; PortfolioQueryUseCase/Service @Service — FD003 read-only)
+    ├── domain/events/              in-process domain events (PortfolioCreatedEvent — FD004)
+    ├── business/                    use-case API + orchestration (CreatePortfolioUseCase/Service; PortfolioQueryUseCase/Service — FD003; ValuePortfolioUseCase + PortfolioValuationQueryUseCase / PortfolioValuationService — FD004)
     └── infrastructure/
         ├── api/
         │   └── rest/                @RestController + @RestControllerAdvice
         │       ├── dto/             request/response records (JSON shape = OpenAPI contract)
         │       └── mapper/          transport ⇄ business mapping (@Component)
-        ├── persistence/             PortfolioPersistenceAdapter implements domain.ports.PortfolioRepository
+        ├── marketdata/              EnMarketDataGatewayAdapter — the ONLY portfolio class importing ..core.marketdata.. (AR-062, FD004)
+        ├── valuation/               PortfolioValuationOnCreationListener — synchronous @EventListener, catch-all (FD004)
+        ├── persistence/             PortfolioPersistenceAdapter + PortfolioValuationPersistenceAdapter
         │   ├── entity/              @Entity — JPA mapping only (infrastructure-only; the domain has no persistence annotations)
         │   ├── repository/          Spring Data repositories (derived queries only)
         │   └── mapper/              domain ⇄ entity mapping
@@ -72,7 +75,30 @@ abstraction. The `portfolio` module:
   `CreatePortfolioResponse` (`Portfolio` schema); the `{portfolioId}` path variable is typed `UUID`
   so a non-UUID segment is Spring's default `400`. `PortfolioNotFoundException` →
   `PortfolioExceptionHandler` `404` `/problems/portfolio-not-found` (the advice's `assignableTypes`
-  now covers both controllers; the FD001 `400`/`503` handlers are unchanged). No write path.
+  now covers all three portfolio controllers; the FD001 `400`/`503` handlers are unchanged). No write path.
+- **FD004 valuation** (`portfolio` module valuation area): on a genuine create, `CreatePortfolioService`
+  publishes an in-process `PortfolioCreatedEvent`; `PortfolioValuationOnCreationListener` (a
+  **synchronous** `@EventListener`) then runs `PortfolioValuationService.value(...)` inside a
+  catch-all — a valuation failure is logged, a best-effort `FAILED` snapshot is written, and the
+  create request still returns `201` (the persisted portfolio is never touched). The service reads
+  market data only through `domain.ports.MarketDataGateway` (implemented by
+  `infrastructure.marketdata.EnMarketDataGatewayAdapter`, the sole importer of `..core.marketdata..`
+  — every `MarketDataException` → `Optional.empty()`), runs the **pure**
+  `domain.model.PortfolioValuationCalculator` (`BigDecimal` only; native value, EUR/USD via FX,
+  totals, weights, sector allocation, `PENDING`/`COMPLETED`/`PARTIAL`/`FAILED` status), and persists
+  the latest snapshot via `PortfolioValuationPersistenceAdapter` (delete-then-insert in one
+  transaction — `portfolio_id` is `UNIQUE`; zero writes to `portfolio`/`position`). Read path:
+  `PortfolioValuationController` serves `GET /api/portfolios/{portfolioId}/valuation` (a Portfolio
+  with no snapshot → an explicit `PENDING` body; unknown id → `404` `/problems/portfolio-not-found`).
+  Flyway `V4__portfolio_valuation.sql` owns the three new tables. `+3` ArchUnit rules fence the
+  boundary (portfolio domain/business free of `..marketdata..`; `..marketdata..` reached only from
+  `infrastructure.marketdata`; no `double`/`float` field in `portfolio.domain`). The FD004
+  Portfolio-detail UI (frontend `portfolio-detail.page` + a self-contained `pie-chart.component`,
+  no charting library) — two mandatory *Allocation by Ticker* / *Allocation by Sector* pie charts,
+  per-Position market price shown with its native currency, sector percentages taken from the
+  sector chart's legend (no separate list) — consumes this same `PortfolioValuation` response
+  (`nativeMarketValue` still returned, just not rendered); **no backend or API change** for the
+  charts or the detail-table trim.
 - `infrastructure.persistence.entity.{PortfolioEntity,PositionEntity,InvestorEntity}` — JPA mapping
   onto the **existing** tables. Decimal columns declare no `precision`/`scale` so the investor's
   exact input scale round-trips.
@@ -120,6 +146,48 @@ local **Financial Instrument catalog** that FD002 searches for controlled instru
 Configuration lives under `app.reference-data.*` in `application.yml` — all values are
 `classpath:` locations of committed files; no secret, no host path.
 
+## `marketdata` module (EN005 — Finnhub market data integration)
+
+A third functional module, sibling of `portfolio` / `financialinstrument`, ADR-003 layout —
+**`domain` + `infrastructure` only** (no `business`: the ports are *outbound* and are consumed by a
+future Portfolio-valuation feature, not by this module). It provides a **provider-neutral** backend
+capability to obtain external market data, with **Finnhub** as the initial provider, fully isolated
+behind adapters.
+
+- **Three independent outbound ports** (`domain.ports`): `MarketDataPort.getLatestPrice`,
+  `InstrumentProfilePort.getProfile`, `FxRatePort.getRate(from, to)`. Each is separately
+  replaceable (e.g. a future ECB `FxRatePort`) without touching the others.
+- **Provider-neutral read models** (`domain.model`): `MarketPrice`, `InstrumentProfile`, `FxRate`,
+  `InstrumentIdentifier` (`ticker + MIC + currency`), `SupportedCurrency` (`EUR`/`USD`), `Sector`
+  (a classification string or `UNCLASSIFIED` — **never inferred**), `ObservedAtSource`
+  (`PROVIDER_TIMESTAMP` / `RETRIEVAL_TIME`). All prices and rates are `BigDecimal`; a missing or
+  zero provider value is **never** a valid `0` — it is the capability's `*UnavailableException`.
+- **Neutral error model** (`domain.exceptions`): `MarketData/InstrumentProfile/FxRate` `Unavailable`,
+  `ProviderRateLimited` (HTTP 429), `ProviderAuthenticationFailed` (401/403),
+  `InstrumentNotResolved` (no Finnhub symbol — no call is made), `MarketDataNotConfigured`
+  (no API key). No Finnhub HTTP status or DTO ever crosses a port.
+- **`infrastructure.finnhub`** — the only place Finnhub concerns live: `FinnhubRestClient` (the
+  **sole** `RestClient` user in the module — builds the client with explicit connect/read timeouts,
+  sends the API key as the **`X-Finnhub-Token` request header** — never a URL parameter —, calls
+  `/quote` · `/stock/profile2` · `/forex/rates`, and translates every outcome to a neutral
+  exception); `dto/` (Jackson records); `mapper/`; `resolver/` (`FinnhubSymbolResolver` +
+  `finnhub-symbol-map.csv` — US MICs pass through, mapped non-US MICs get a suffix, anything else →
+  `InstrumentNotResolved`); `cache/` (`TtlCache` + three `@Primary` decorator ports — cache
+  *successful* results only, TTLs `finnhub.cache.*`, and never rewrite a result's `observedAt`).
+- **Observability** — one structured `event=FinnhubCall` log record per outbound call
+  (`provider`, `operation`, `outcome`, `httpStatusCategory`, `latencyMs`); **no** key, URL, or body.
+- **Configuration** — `finnhub.*` in `application.yml`; `api-key: ${FINNHUB_API_KEY:}` (empty
+  default), `base-url: ${FINNHUB_BASE_URL:https://finnhub.io/api/v1}`. A blank key ⇒ the integration
+  is **disabled**: the app starts normally, logs `event=FinnhubIntegrationDisabled` once, and every
+  port call throws `MarketDataNotConfigured`. Unrelated capabilities are unaffected. `compose.yaml`
+  forwards `FINNHUB_API_KEY` / `FINNHUB_BASE_URL` from the shell or `infrastructure/local/.env` to
+  the backend container, so `./start.sh` (with a real key in `.env`) exercises live Finnhub;
+  `./e2e.sh` overrides `FINNHUB_BASE_URL` to a local stub container.
+- **No** persistence / Flyway migration, **no** external REST API (`openapi.yaml` untouched), **no**
+  frontend, **no** new Maven dependency, **no** LLM, **no** valuation arithmetic (EN005 supplies
+  data only). Tests use Spring `MockRestServiceServer` — **no** live Finnhub, no key, no network;
+  an opt-in `FinnhubProviderSmokeTest` (`FINNHUB_SMOKE=1`) validates a real key locally.
+
 ### Consumed by `portfolio` for FD002 (AR-062)
 
 The `portfolio` module validates that every Position on `POST /api/portfolios` references an active
@@ -137,9 +205,11 @@ portfolio.business.CreatePortfolioService
 ```
 
 `portfolio.domain` / `portfolio.business` never see a `financialinstrument` type; the currency
-match is completed in the adapter. Enforced by `StandardArchitectureRulesTest` (14 rules):
-`portfolio` may reference only `..financialinstrument.domain.ports..` / `..domain.model..`, only
-from `portfolio.infrastructure`.
+match is completed in the adapter. Enforced by `StandardArchitectureRulesTest` (**18 rules** since
+EN005): `portfolio` may reference only `..financialinstrument.domain.ports..` / `..domain.model..`,
+only from `portfolio.infrastructure`; and Finnhub `dto` / `client` / `RestClient` / HTTP / Jackson
+types are confined to `..marketdata.infrastructure.finnhub..` (the `marketdata` domain is free of
+them, and `marketdata` depends on no other business module).
 
 ## Tests
 
@@ -151,6 +221,10 @@ from `portfolio.infrastructure`.
 | `…/infrastructure/persistence/*IT` | integration — Spring Data JPA adapter vs real PostgreSQL (Testcontainers) |
 | `portfolio/*IT`, `financialinstrument/*IT`, `bootstrap/PlatformIntegrationIT` | full-slice integration (`@SpringBootTest` + Testcontainers) |
 | `financialinstrument/…/ReferenceDataFailureSafetyIT`, `ReferenceDataUpsertAdapterIT` | import rollback-safety + idempotency (Testcontainers) |
+| `marketdata/…/finnhub/**Test` | Finnhub adapter/mapper/client/resolver/cache — Spring `MockRestServiceServer` stub (**no** live provider, no key, no network) |
+| `marketdata/FinnhubIntegrationIT` | full-context wiring: the `@Primary` caching ports; no key ⇒ `MarketDataNotConfigured` from every port |
+| `marketdata/FinnhubProviderSmokeTest` | **opt-in** (`FINNHUB_SMOKE=1` + `FINNHUB_API_KEY`) — live Finnhub; skipped by default / in CI |
 
 Integration tests use Testcontainers (singleton container — `support/PostgresContainerSupport`);
-no manually installed database is needed.
+no manually installed database is needed. The `marketdata` provider tests deliberately do **not**
+use Testcontainers — Finnhub is a true external provider, stubbed with `MockRestServiceServer`.

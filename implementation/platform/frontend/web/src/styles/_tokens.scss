@@ -25,6 +25,18 @@
   --color-warning: #f59e0b;
   --color-info: #38bdf8;
 
+  // Categorical palette for allocation charts (FD004 §17 pie charts). Assigned by slice index,
+  // cycling past 8. Legible on --color-background; colour is never the only signal — every slice
+  // has a text label + percentage in the legend.
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
+  --chart-4: #a855f7;
+  --chart-5: #ef4444;
+  --chart-6: #14b8a6;
+  --chart-7: #ec4899;
+  --chart-8: #eab308;
+
   // Spacing scale
   --spacing-xs: 4px;
   --spacing-sm: 8px;

@@ -20,7 +20,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice(assignableTypes = {
         CreatePortfolioController.class,
-        PortfolioQueryController.class})
+        PortfolioQueryController.class,
+        PortfolioValuationController.class})
 public class PortfolioExceptionHandler {
 
     @ExceptionHandler(PortfolioNotFoundException.class)

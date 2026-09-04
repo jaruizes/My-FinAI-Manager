@@ -1,407 +1,157 @@
-# EN005 — Establish Finnhub Market Data Integration
+# EN005 — Establish External Market Data Capabilities
 
-> **Status:** Approved  
+> **Status:** Approved — Reopened for revision  
 > **Enabler ID:** EN005  
 > **Enabler Name:** Establish Finnhub Market Data Integration  
 > **Supports:** Future portfolio valuation and allocation features  
-> **Last Updated:** 2026-09-03  
+> **Initial Providers:** Finnhub (price/profile), Frankfurter (FX)  
+> **Last Updated:** 2026-09-04
 
 ---
 
 # 1. Purpose
 
-Establish a provider-neutral technical capability that allows My-FinAI-Manager to obtain external market and company data from Finnhub using an API Key.
+Establish provider-neutral market-data capabilities that allow My-FinAI-Manager core/business logic to request:
 
-The capability must support future calculation of:
+- latest available market price of a Financial Instrument;
+- sector and company/instrument information;
+- currency exchange rates.
 
-- latest/available market value of a Position;
-- Portfolio value;
-- sector classification;
-- Portfolio allocation by sector;
-- Portfolio valuation expressed in EUR;
-- Portfolio valuation expressed in USD.
+The core must not know which external provider supplies any capability.
 
-EN005 integrates Finnhub as the initial external provider while preserving provider independence in the domain and business layers.
+Finnhub is the initial provider for market-price and instrument-profile capabilities. Frankfurter is the initial provider for FX rates. Provider selection must remain an infrastructure concern so that each capability can change provider independently and multiple adapters can coexist without affecting core/business logic.
 
-EN005 does not itself define Portfolio valuation UI or Portfolio allocation UX.
+EN005 does not define Portfolio valuation calculations or Portfolio valuation UI.
 
 ---
 
 # 2. Motivation
 
-Existing Portfolio Positions contain deterministic information such as:
+Portfolio valuation needs three independent capabilities:
 
 ```text
-ticker
-market
-quantity
-currency
-average purchase price
+Get latest market price
+Get instrument profile / sector
+Get FX rate
 ```
 
-To value a Portfolio, the platform additionally needs:
+The desired architecture is:
 
 ```text
-latest market price
-company sector / industry
-FX rate
+Core / Business
+      │
+      ├── GetMarketPrice
+      ├── GetInstrumentProfile
+      └── GetFxRate
+              │
+              ▼
+      provider-neutral ports
+              │
+      ┌───────┼────────┐
+      ▼       ▼        ▼
+ Price     Profile      FX
+ Adapter   Adapter     Adapter
+      │       │          │
+      ▼       ▼          ▼
+  Finnhub  Finnhub   Frankfurter
+ initially initially   initially
 ```
 
-Finnhub provides the initial source for those capabilities through:
+A future configuration may be:
 
 ```text
-/quote
-/stock/profile2
-/forex/rates
+MarketPriceProviderPort
+→ AlphaVantageMarketPriceAdapter
+
+InstrumentProfileProviderPort
+→ FinnhubInstrumentProfileAdapter
+
+FxRateProviderPort
+→ EcbFxRateAdapter
 ```
 
-The Finnhub API is accessed using an API Key configured outside source control.
+with no change to Portfolio valuation business logic.
 
 ---
 
-# 3. Scope
+# 3. Architectural Decision
 
-## In Scope
+Provider identity belongs exclusively to infrastructure.
 
-- Configure Finnhub integration through an API Key.
-- Keep the API Key outside source control.
-- Provide provider-neutral domain ports for:
-  - market prices;
-  - instrument/company profile;
-  - FX rates.
-- Implement Finnhub infrastructure adapters for those ports.
-- Use Finnhub `/quote` to obtain stock price information.
-- Use Finnhub `/stock/profile2` to obtain company profile information including:
-  - ticker;
-  - company name;
-  - currency;
-  - exchange;
-  - sector/industry classification when available.
-- Use Finnhub `/forex/rates` to obtain exchange rates.
-- Support at least USD → EUR and EUR → USD.
-- Preserve timestamps/source information needed to understand data freshness.
-- Provide explicit failure behavior when Finnhub data is unavailable or incomplete.
-- Add deterministic automated tests without depending on the live Finnhub service.
-- Preserve ADR-003 Spring architecture.
-- Use Maven.
-- Use OpenTelemetry-compatible observability patterns already established by the platform.
+The initial design MUST NOT contain one monolithic `FinnhubAdapter` implementing every responsibility.
 
-## Out of Scope
+Each capability has its own port and its own adapter.
 
-- Portfolio valuation business rules.
-- Portfolio valuation UI.
-- Sector allocation UI.
-- Historical Portfolio valuation.
-- Intraday charts.
-- Historical stock prices.
-- Historical FX series.
-- Currency support beyond EUR and USD unless required by a later feature.
-- AI-based valuation.
-- AI-based sector classification.
-- News.
-- Recommendations.
-- Stop-Loss calculation.
-- Direct frontend calls to Finnhub.
-- Replacing EN004 as the canonical Financial Instrument Catalog.
-- Making Finnhub's exchange representation the canonical market identity.
+Required provider ports:
+
+```text
+MarketPriceProviderPort
+InstrumentProfileProviderPort
+FxRateProviderPort
+```
+
+Initial adapters:
+
+```text
+FinnhubMarketPriceAdapter
+FinnhubInstrumentProfileAdapter
+FrankfurterFxRateAdapter
+```
+
+Provider selection is independently configurable per capability.
 
 ---
 
-# 4. Architectural Principle
+# 4. Core-Facing Operations
 
-Finnhub is an infrastructure provider, not a domain dependency.
-
-The business/core architecture should consume provider-neutral ports:
+The business layer must expose operations conceptually equivalent to:
 
 ```text
-MarketDataPort
-InstrumentProfilePort
-FxRatePort
+obtainMarketPrice(instrument)
+obtainInstrumentProfile(instrument)
+obtainFxRate(fromCurrency, toCurrency)
 ```
 
-Conceptually:
-
-```text
-                    business
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-        ▼              ▼              ▼
- MarketDataPort  InstrumentProfilePort  FxRatePort
-        ▲              ▲              ▲
-        └──────────────┼──────────────┘
-                       │
-                FinnhubAdapter(s)
-                       │
-                       ▼
-                  Finnhub API
-```
-
-The dependency direction remains:
-
-```text
-infrastructure → business → domain
-```
-
-Business/domain code must not depend on Finnhub SDK types, Finnhub HTTP response objects, Finnhub field names, or Finnhub authentication mechanisms.
-
----
-
-# 5. Functional Module
-
-The capability should live in an appropriate functional module without creating a new deployable service by default.
-
-A possible structure:
-
-```text
-com.myfinaimanager.core.marketdata
-│
-├── domain/
-│   ├── model/
-│   ├── ports/
-│   └── exceptions/
-│
-├── business/
-│
-└── infrastructure/
-    └── finnhub/
-        ├── client/
-        ├── dto/
-        ├── mapper/
-        └── config/
-```
-
-If instrument profile enrichment belongs more naturally inside the existing `financialinstrument` module, the planning phase may place the corresponding port/use case there.
-
-Module placement must preserve domain cohesion and ADR-003 dependency rules.
-
----
-
-# 6. Provider Configuration
-
-Finnhub access must be configured using an API Key.
-
-Conceptually:
-
-```text
-FINNHUB_API_KEY
-```
-
-The API Key must:
-
-- not be committed to Git;
-- not be hard-coded in application source;
-- not be hard-coded in Docker images;
-- not be returned through APIs;
-- not be written to logs;
-- be injected through runtime configuration.
-
-A Spring configuration may conceptually use:
-
-```text
-finnhub.api-key=${FINNHUB_API_KEY}
-finnhub.base-url=https://finnhub.io/api/v1
-```
-
-Exact property names are implementation details.
-
-Local development may use `.env` or equivalent local environment configuration provided the secret file is excluded from version control.
-
-Deployment environments must use the project's approved secret-management mechanism.
-
----
-
-# 7. Market Price Capability
-
-The platform must provide a provider-neutral capability to obtain the latest available market price for a Financial Instrument.
-
-Conceptual port:
+Possible Java use-case names:
 
 ```java
-MarketPrice getLatestPrice(InstrumentIdentifier instrument);
+GetMarketPrice
+    GetInstrumentProfile
+GetFxRate
 ```
 
-The domain result should conceptually contain:
+Core/business code must never call Finnhub clients or Finnhub-specific APIs directly.
+
+---
+
+# 5. Provider-Neutral Domain Models
+
+## MarketPrice
 
 ```text
 MarketPrice
-- ticker
-- market?
+- instrumentIdentifier
 - price
 - currency
 - observedAt
+- retrievedAt
 - source
 ```
 
-Exact domain design belongs to specification/planning.
-
----
-
-# 8. Finnhub Quote Endpoint
-
-Finnhub `/quote` is the initial provider endpoint for stock price information.
-
-Conceptually:
-
-```text
-GET /quote?symbol={symbol}
-```
-
-Relevant response information includes:
-
-```text
-c   current/latest price
-d   change
-dp  percentage change
-h   high
-l   low
-o   open
-pc  previous close
-t   timestamp
-```
-
-EN005 requires only the information needed for current Portfolio valuation unless a later feature explicitly needs additional fields.
-
-For valuation purposes, the initial candidate is:
-
-```text
-price = c
-```
-
-The implementation must not silently use zero or a missing price as a valid market value.
-
----
-
-# 9. Instrument Profile Capability
-
-The platform must provide a provider-neutral capability to obtain external profile/classification information for a Financial Instrument.
-
-Conceptual port:
-
-```java
-InstrumentProfile getProfile(InstrumentIdentifier instrument);
-```
-
-The result may conceptually contain:
+## InstrumentProfile
 
 ```text
 InstrumentProfile
-- ticker
+- instrumentIdentifier
 - name
 - sector
 - industry?
-- currency
-- providerExchange?
-- source
-- observedAt?
+- currency?
+- lastUpdatedAt
+- source?
 ```
 
-Provider-specific field names must not leak outside infrastructure.
-
----
-
-# 10. Finnhub Company Profile 2 Endpoint
-
-Finnhub `/stock/profile2` is the initial endpoint used for company profile information.
-
-Conceptually:
-
-```text
-GET /stock/profile2?symbol={symbol}
-```
-
-Relevant Finnhub data may include:
-
-```text
-ticker
-name
-currency
-exchange
-finnhubIndustry
-```
-
-The initial mapping is:
-
-```text
-Finnhub ticker           → provider ticker/reference
-Finnhub name             → company/instrument name
-Finnhub currency         → quote/profile currency metadata
-Finnhub finnhubIndustry  → initial sector/industry classification
-Finnhub exchange         → provider metadata only
-```
-
-The Finnhub `exchange` field must not replace EN004's canonical ISO 10383 MIC.
-
----
-
-# 11. Relationship with EN004
-
-EN004 remains the canonical source for Financial Instrument identity.
-
-Example:
-
-```text
-EN004
-FinancialInstrument
-- ticker   = AAPL
-- market   = XNAS
-- currency = USD
-```
-
-Finnhub enrichment:
-
-```text
-/quote
-→ price
-
-/profile2
-→ name
-→ currency metadata
-→ exchange description
-→ finnhubIndustry
-```
-
-Canonical identity remains:
-
-```text
-ticker + market(MIC)
-```
-
-Finnhub data enriches that identity but does not redefine it.
-
----
-
-# 12. Symbol Resolution
-
-EN004 may contain:
-
-```text
-ticker
-market
-providerSymbol
-```
-
-The Finnhub adapter must use an explicitly resolved provider symbol appropriate for Finnhub.
-
-The implementation must not assume that every canonical ticker can always be sent unchanged to Finnhub.
-
-Symbol-resolution rules must be provider-specific infrastructure behavior.
-
-If a Financial Instrument cannot be resolved to a valid Finnhub symbol, the adapter must return an explicit unavailable/unresolved result rather than guessing.
-
----
-
-# 13. FX Rate Capability
-
-The platform must provide a provider-neutral capability for currency conversion.
-
-Conceptual port:
-
-```java
-FxRate getRate(Currency from, Currency to);
-```
-
-The domain result should conceptually contain:
+## FxRate
 
 ```text
 FxRate
@@ -409,450 +159,806 @@ FxRate
 - toCurrency
 - rate
 - observedAt
+- retrievedAt
 - source
 ```
 
----
-
-# 14. Finnhub Forex Rates Endpoint
-
-Finnhub `/forex/rates` is the initial endpoint for FX rates.
-
-Conceptually:
-
-```text
-GET /forex/rates?base=USD
-GET /forex/rates?base=EUR
-```
-
-The integration must support, at minimum:
-
-```text
-USD → EUR
-EUR → USD
-```
-
-The provider response must be mapped into a provider-neutral `FxRate`.
+Provider DTOs must never cross the infrastructure boundary.
 
 ---
 
-# 15. Currency Conversion Rules
+# 6. Adapter per Capability
 
-The FX adapter provides rates.
+## 6.1 Market Price
 
-It does not own Portfolio valuation arithmetic.
+Port:
 
-A future valuation capability may use:
-
-```text
-convertedValue = originalValue × fxRate
+```java
+interface MarketPriceProviderPort {
+    MarketPrice getLatestPrice(InstrumentIdentifier instrument);
+}
 ```
 
-The business layer must use decimal-safe numeric types appropriate for financial calculations.
+Initial implementation:
 
-Floating-point binary arithmetic must not be used for monetary calculations where deterministic decimal arithmetic is required.
+```text
+FinnhubMarketPriceAdapter
+```
+
+Initial endpoint:
+
+```text
+Finnhub /quote
+```
+
+The adapter owns provider-specific symbol resolution, authentication, HTTP invocation, DTO mapping, and provider-error translation.
 
 ---
 
-# 16. Future Portfolio Valuation Support
+## 6.2 Instrument Profile / Sector
 
-EN005 must provide enough information for a later feature to calculate:
+External provider port:
 
-```text
-positionValue = quantity × latestPrice
-normalizedPositionValue = positionValue × fxRate   # when conversion is required
-portfolioValue = Σ normalizedPositionValue
+```java
+interface InstrumentProfileProviderPort {
+    InstrumentProfile getProfile(InstrumentIdentifier instrument);
+}
 ```
 
-A future feature may expose totals such as:
+Initial implementation:
 
 ```text
-Portfolio Value
-€23,421.76
-$27,114.43
+FinnhubInstrumentProfileAdapter
 ```
 
-EN005 supplies price/profile/FX data only.
+Initial endpoint:
 
-The calculation itself remains deterministic business logic.
+```text
+Finnhub /stock/profile2
+```
+
+The adapter only retrieves and normalizes external profile data.
+
+It must not decide whether local persistence should be queried first.
 
 ---
 
-# 17. Future Sector Allocation Support
+## 6.3 FX Rate
 
-EN005 must provide sector/classification information sufficient for a future feature to calculate sector weights.
+Port:
 
-Conceptually:
-
-```text
-AAPL → Technology
-MSFT → Technology
-SAN  → Financial Services
-IBE  → Utilities
+```java
+interface FxRateProviderPort {
+    FxRate getRate(Currency from, Currency to);
+}
 ```
 
-A future feature can calculate:
+Initial implementation:
 
 ```text
-sectorValue = Σ normalized position value for positions in sector
-sectorWeight = sectorValue / portfolioValue
+FrankfurterFxRateAdapter
 ```
 
-EN005 must not use an LLM to infer a sector when Finnhub does not provide one.
-
-Missing sector data must remain explicitly unknown/unclassified unless another approved deterministic source is introduced.
-
----
-
-# 18. Data Freshness
-
-Market price and FX information are time-sensitive.
-
-Every returned price or exchange rate should retain enough information to understand when it was observed.
-
-At minimum:
+Initial endpoint:
 
 ```text
-source
-observedAt
+GET https://api.frankfurter.dev/v1/latest?base={fromCurrency}&symbols={toCurrency}
 ```
-
-where supported by the provider.
-
-For data without an explicit provider timestamp, the adapter may record retrieval time separately from provider observation time.
-
----
-
-# 19. Caching
-
-EN005 may introduce short-lived caching to reduce Finnhub API calls, rate-limit pressure, latency, and repeated requests.
-
-Suggested initial behavior:
-
-```text
-company profile → longer-lived cache
-market price    → short-lived cache
-FX rate         → short-lived cache
-```
-
-Exact TTL values must be defined during specification/planning based on Finnhub plan limitations and product freshness requirements.
-
-Caching must not hide data freshness.
-
----
-
-# 20. Rate Limits
-
-The integration must tolerate provider rate limits.
-
-The adapter must distinguish rate-limit failures from authentication failures, symbol-not-found, malformed responses, network failures, and provider server failures.
-
-The implementation should avoid one external request per UI-rendered field when data can be fetched/reused efficiently.
-
-Rate-limit handling must not fabricate market data.
-
----
-
-# 21. Error Model
-
-Provider failures must be translated into provider-neutral failures.
-
-Conceptually:
-
-```text
-MarketDataUnavailable
-InstrumentProfileUnavailable
-FxRateUnavailable
-ProviderRateLimited
-ProviderAuthenticationFailed
-InstrumentNotResolved
-```
-
-Finnhub-specific HTTP codes or DTOs must not propagate into domain/business APIs.
-
----
-
-# 22. Partial Data
-
-The system must support partial availability.
 
 Examples:
 
 ```text
-price available
-sector unavailable
-FX available
+USD → EUR
+GET https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR
+
+EUR → USD
+GET https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD
 ```
 
-or:
+Frankfurter does not require an API Key for the public API.
 
-```text
-profile available
-price unavailable
-```
+The adapter must map the provider response into the provider-neutral `FxRate` model and must not leak Frankfurter-specific payloads into core/business code.
 
-EN005 must not treat unrelated missing enrichment data as valid zero values.
-
-A later Portfolio valuation feature must decide which missing inputs block valuation and which only reduce enrichment quality.
+A future provider can replace this adapter independently.
 
 ---
 
-# 23. Security
+# 7. Independent Provider Configuration
 
-The Finnhub API Key is a secret.
+Provider selection must be configurable independently.
 
-The implementation must ensure:
+Conceptually:
 
-- no API Key in Git;
-- no API Key in frontend bundles;
-- no API Key in OpenAPI examples;
-- no API Key in logs;
-- no API Key in error responses;
-- no API Key in traces;
-- no direct browser-to-Finnhub communication.
+```text
+market-data.price.provider=finnhub
+market-data.profile.provider=finnhub
+market-data.fx.provider=frankfurter
+```
 
-All Finnhub calls are backend-to-provider calls.
+Future configuration may be:
+
+```text
+market-data.price.provider=alpha-vantage
+market-data.profile.provider=finnhub
+market-data.fx.provider=ecb
+```
+
+Changing one provider must not require changes to Portfolio domain, Portfolio valuation business logic, API contracts, or the other adapters.
+
+The initial provider assignment is therefore:
+
+```text
+price   → Finnhub
+profile → Finnhub
+FX      → Frankfurter
+```
 
 ---
 
-# 24. Observability
+# 8. Finnhub Configuration
 
-Outbound Finnhub calls should be observable.
-
-At minimum, capture:
+Finnhub authentication uses an externally supplied API Key:
 
 ```text
-provider = finnhub
+FINNHUB_API_KEY
+```
+
+The API Key must not be committed, hard-coded, exposed to frontend code, returned by APIs, logged, or traced.
+
+Finnhub remains an infrastructure concern.
+
+---
+
+# 8A. Frankfurter Configuration
+
+Frankfurter is the initial FX-rate provider.
+
+Public API base URL:
+
+```text
+https://api.frankfurter.dev
+```
+
+Initial endpoint contract:
+
+```text
+GET /v1/latest?base={fromCurrency}&symbols={toCurrency}
+```
+
+For the initial EUR/USD scope:
+
+```text
+GET /v1/latest?base=USD&symbols=EUR
+GET /v1/latest?base=EUR&symbols=USD
+```
+
+Example response shape:
+
+```json
+{
+  "amount": 1.0,
+  "base": "USD",
+  "date": "2026-08-21",
+  "rates": {
+    "EUR": 0.85477
+  }
+}
+```
+
+The adapter maps:
+
+```text
+base            → fromCurrency
+rates[target]   → rate
+date            → observedAt/date
+retrieval time  → retrievedAt
+source          → FRANKFURTER
+```
+
+The public API requires no API Key.
+
+The application must not treat Frankfurter as a domain dependency.
+
+---
+
+# 9. Relationship with EN004
+
+EN004 remains authoritative for canonical Financial Instrument identity:
+
+```text
+FinancialInstrument
+- ticker
+- market (MIC)
+- currency
+- providerSymbol?
+```
+
+Provider adapters may use provider-specific symbol resolution but must not redefine the canonical identity.
+
+Finnhub exchange descriptions must not replace EN004 MIC values.
+
+---
+
+# 10. Database-First Instrument Profile Strategy
+
+Sector and instrument/company information are relatively stable and must use a database-first lookup strategy.
+
+```text
+GetInstrumentProfile
+        │
+        ▼
+InstrumentProfileRepositoryPort
+        │
+        ├── FOUND
+        │      ↓
+        │   return local profile
+        │
+        └── NOT FOUND
+               ↓
+       InstrumentProfileProviderPort
+               ↓
+          external adapter
+               ↓
+          normalize profile
+               ↓
+       persist in PostgreSQL
+               ↓
+            return
+```
+
+PostgreSQL is the local persistence mechanism for retrieved profile enrichment.
+
+---
+
+# 11. Instrument Profile Repository Port
+
+Business must use a provider-neutral persistence port conceptually equivalent to:
+
+```java
+interface InstrumentProfileRepositoryPort {
+
+    Optional<InstrumentProfile> findByInstrument(
+        InstrumentIdentifier instrument
+    );
+
+    InstrumentProfile save(
+        InstrumentProfile profile
+    );
+}
+```
+
+Infrastructure implementation:
+
+```text
+InstrumentProfileRepositoryPort
+        ↓
+JpaInstrumentProfileRepositoryAdapter
+        ↓
+Spring Data JPA
+        ↓
+PostgreSQL
+```
+
+Business code must not use Spring Data repositories directly.
+
+---
+
+# 12. Instrument Profile Retrieval Rules
+
+## BR-EN005-001 — Database First
+When instrument profile/sector information is requested, local persistence must be queried first.
+
+## BR-EN005-002 — Local Hit
+If the profile exists locally, return it without calling the external provider.
+
+## BR-EN005-003 — Local Miss
+If the profile does not exist locally, call the configured `InstrumentProfileProviderPort`.
+
+## BR-EN005-004 — Persist External Result
+A successfully retrieved and normalized external profile must be persisted.
+
+## BR-EN005-005 — Provider-Neutral Persistence
+Persisted profile data must use provider-neutral fields. Finnhub payloads must not become the canonical persistence model.
+
+## BR-EN005-006 — Missing External Profile
+If neither local data nor the provider can supply a profile, return an explicit unavailable result. No sector may be fabricated.
+
+---
+
+# 13. Profile Freshness
+
+The first version requires database-first reuse.
+
+Persisted profile information should retain:
+
+```text
+lastUpdatedAt
+source?
+```
+
+Initial behavior:
+
+```text
+profile exists in DB
+→ use it
+
+profile absent
+→ fetch externally and persist
+```
+
+No automatic TTL-based refresh is required by this revision.
+
+---
+
+# 14. Price Retrieval Strategy
+
+Market prices are time-sensitive.
+
+```text
+GetMarketPrice
+        ↓
+MarketPriceProviderPort
+        ↓
+configured price adapter
+```
+
+EN005 does not require market price to follow the database-first profile strategy.
+
+A future cache or persistence mechanism may be added without changing the port.
+
+---
+
+# 15. FX Retrieval Strategy
+
+FX retrieval is independent:
+
+```text
+GetFxRate
+      ↓
+FxRateProviderPort
+      ↓
+configured FX adapter
+```
+
+A future `EcbFxRateAdapter`, `AlphaVantageFxRateAdapter`, or other adapter may replace `FrankfurterFxRateAdapter` without changing core logic.
+
+---
+
+# 16. Multi-Adapter Architecture
+
+Several adapters may coexist:
+
+```text
+MarketPriceProviderPort
+├── FinnhubMarketPriceAdapter
+└── AlphaVantageMarketPriceAdapter
+
+InstrumentProfileProviderPort
+├── FinnhubInstrumentProfileAdapter
+└── AnotherProfileAdapter
+
+FxRateProviderPort
+├── FrankfurterFxRateAdapter
+└── EcbFxRateAdapter
+```
+
+Provider selection must be resolved through infrastructure configuration/wiring, not through provider-specific `if/else` logic in core/business code.
+
+Automatic fallback chains are not required by this revision.
+
+---
+
+# 17. Functional Module Structure
+
+Possible ADR-003-compliant structure:
+
+```text
+marketdata/
+├── domain/
+│   ├── model/
+│   ├── ports/
+│   │   ├── MarketPriceProviderPort.java
+│   │   └── FxRateProviderPort.java
+│   └── exceptions/
+├── business/
+│   ├── GetMarketPrice.java
+│   └── GetFxRate.java
+└── infrastructure/
+    └── provider/
+        ├── finnhub/
+        │   ├── price/
+        │   ├── client/
+        │   └── config/
+        └── frankfurter/
+            └── fx/
+```
+
+Profile enrichment may remain in `financialinstrument`:
+
+```text
+financialinstrument/
+├── domain/
+│   ├── model/
+│   └── ports/
+│       ├── InstrumentProfileProviderPort.java
+│       └── InstrumentProfileRepositoryPort.java
+├── business/
+│   └── GetInstrumentProfile.java
+└── infrastructure/
+    ├── persistence/
+    │   ├── entity/
+    │   ├── repository/
+    │   ├── mapper/
+    │   └── JpaInstrumentProfileRepositoryAdapter.java
+    └── provider/
+        └── finnhub/
+            └── FinnhubInstrumentProfileAdapter.java
+```
+
+Exact package names may be refined during planning, but capability separation is mandatory.
+
+---
+
+# 18. Dependency Rules
+
+ADR-003 remains mandatory:
+
+```text
+infrastructure → business → domain
+```
+
+Additionally:
+
+```text
+business -X-> Finnhub
+domain   -X-> Finnhub
+business -X-> Frankfurter
+domain   -X-> Frankfurter
+business -X-> Spring Data JPA
+domain   -X-> Spring Data JPA
+```
+
+Only infrastructure knows provider technology.
+
+---
+
+# 19. Error Model
+
+Core/business errors must be provider-neutral:
+
+```text
+MarketPriceUnavailable
+InstrumentProfileUnavailable
+FxRateUnavailable
+ExternalProviderUnavailable
+ExternalProviderRateLimited
+ExternalProviderAuthenticationFailed
+InstrumentNotResolved
+```
+
+Provider-specific HTTP status, DTO, or error codes from Finnhub or Frankfurter must be translated inside each adapter.
+
+---
+
+# 20A. Initial Market Coverage
+
+The initial EN005 implementation supports **US equities only** for market-price and instrument-profile retrieval through Finnhub.
+
+This is an explicit initial scope decision, not a core-domain limitation.
+
+Conceptually:
+
+```text
+Initial supported market-data universe
+→ United States equities
+```
+
+The core/business APIs remain provider-neutral and must not encode Finnhub-specific market restrictions.
+
+A future adapter or provider change may extend coverage to European or other markets without changing the core use cases or public business contracts.
+
+EN004 may continue to contain canonical instruments from other markets even when EN005 cannot currently value or enrich them.
+
+---
+
+# 20. Provider Limitations
+
+Core must not contain provider-plan rules such as:
+
+```text
+Finnhub supports only US equities on the current plan
+Frankfurter is used for FX instead of relying on Finnhub FX capabilities
+```
+
+Those are infrastructure/provider limitations.
+
+The active adapter may return a provider-neutral unsupported/unavailable result.
+
+A future adapter may extend coverage without changing business logic.
+
+---
+
+# 21. Observability
+
+Each external adapter must provide provider-aware infrastructure telemetry:
+
+```text
+provider
+capability
 operation
-success/failure
 latency
+success/failure
 HTTP status category
 ```
 
-Do not include the API Key in logs, spans, or metrics labels.
-
-Where OpenTelemetry instrumentation already exists, outbound HTTP calls should participate in platform tracing.
-
----
-
-# 25. HTTP Client
-
-The Finnhub integration must use the project's approved Java/Spring HTTP-client approach.
-
-A third-party Finnhub SDK is not required.
-
-Direct HTTP integration is preferred when it keeps the API contract explicit, dependency footprint small, provider DTOs contained in infrastructure, and testability straightforward.
-
-The exact Spring HTTP client is decided during planning according to the current platform conventions.
-
----
-
-# 26. Testing Strategy
-
-Automated tests must not depend on live Finnhub.
-
-At minimum:
-
-## Unit Tests
-
-- quote DTO → domain MarketPrice mapping;
-- profile DTO → domain InstrumentProfile mapping;
-- FX response → domain FxRate mapping;
-- null/missing price handling;
-- missing sector handling;
-- unsupported symbol handling;
-- provider-specific exchange does not replace canonical MIC.
-
-## Adapter / Integration Tests
-
-Use WireMock or equivalent deterministic HTTP stubbing to verify:
-
-- correct Finnhub endpoint;
-- correct query parameters;
-- API Key sent correctly;
-- successful quote response;
-- successful profile response;
-- successful FX response;
-- authentication failure;
-- rate limit;
-- provider failure;
-- malformed payload;
-- timeout/network behavior.
-
-Live Finnhub calls must not be required for CI.
-
----
-
-# 27. Required Ports
-
-The formal design should preserve three independently replaceable capabilities:
+Example:
 
 ```text
+provider=finnhub
+capability=market-price
+```
+
+```text
+provider=frankfurter
+capability=fx-rate
+```
+
+API keys must never appear in logs, metrics, or traces.
+
+---
+
+# 22. Testing Strategy
+
+Automated tests must not depend on live providers.
+
+## Business tests
+
+Verify:
+
+- core operations are provider-independent;
+- `GetInstrumentProfile` checks repository first;
+- local profile hit does not call provider;
+- local profile miss calls provider;
+- external profile is persisted;
+- provider failure does not fabricate data.
+
+## Adapter tests
+
+Each adapter is tested independently with WireMock or equivalent.
+
+### FinnhubMarketPriceAdapter
+- correct quote request;
+- API Key;
+- response mapping;
+- missing price;
+- unsupported symbol;
+- rate limit;
+- authentication failure;
+- provider failure.
+
+### FinnhubInstrumentProfileAdapter
+- correct profile request;
+- profile/sector mapping;
+- missing classification;
+- provider failure.
+
+### FrankfurterFxRateAdapter
+- correct `/v1/latest` request;
+- correct `base` query parameter;
+- correct `symbols` query parameter;
+- successful USD → EUR mapping;
+- successful EUR → USD mapping;
+- malformed response;
+- unsupported currency;
+- provider failure.
+
+---
+
+# 23. Architecture Tests
+
+ArchUnit should verify:
+
+- domain does not depend on infrastructure;
+- business does not depend on infrastructure;
+- Finnhub and Frankfurter packages remain under infrastructure;
+- provider DTOs do not appear in domain/business;
+- JPA entities/repositories remain in infrastructure.
+
+---
+
+# 24. Verification Criteria
+
+## VC-001 — Provider-Neutral Core
+Core/business obtains price, profile, and FX without referencing Finnhub.
+
+## VC-002 — Separate Provider Ports
+Price, profile, and FX use independent provider ports.
+
+## VC-003 — Separate Provider Adapters
+Finnhub price/profile and Frankfurter FX integrations are implemented as independent adapters.
+
+## VC-004 — Independent Provider Selection
+Changing one provider does not require changing the other capabilities.
+
+## VC-005 — Database-First Profile
+Instrument profile retrieval checks PostgreSQL before external access.
+
+## VC-006 — No External Call on Local Hit
+Existing profile data is returned locally without provider invocation.
+
+## VC-007 — External Fetch on Miss
+Missing profile data invokes the configured external profile provider.
+
+## VC-008 — Profile Persistence
+External profile data is normalized and persisted.
+
+## VC-009 — Provider-Neutral Persistence
+Stored profile data contains no Finnhub DTO dependency.
+
+## VC-010 — Canonical Identity
+EN004 remains authoritative for `ticker + market(MIC)`.
+
+## VC-011 — Secret Protection
+Finnhub API Key remains exclusively in infrastructure/runtime configuration.
+
+Frankfurter public API access requires no API Key and must not introduce a fake/shared application secret.
+
+## VC-012 — Provider Limitations Hidden
+Finnhub subscription/coverage limitations do not leak into business rules.
+
+## VC-013 — Multiple Adapters Possible
+Several adapter implementations may coexist.
+
+## VC-014 — Deterministic Tests
+CI does not require live Finnhub.
+
+## VC-015 — ADR-003 Compliance
+Implementation follows the standard Spring architecture.
+
+---
+
+# 25. Explicit Technical Decisions
+
+1. EN005 remains named **Establish Finnhub Market Data Integration**.
+2. The architecture is provider-neutral despite Finnhub remaining the initial market-data/profile provider.
+3. Each external capability has an independent port.
+4. Finnhub provides the initial `MarketPriceProviderPort` adapter.
+5. Finnhub provides the initial `InstrumentProfileProviderPort` adapter.
+6. Frankfurter provides the initial `FxRateProviderPort` adapter.
+7. There is no single all-purpose provider adapter.
+8. Core/business never branches on provider identity.
+9. Provider selection is infrastructure configuration.
+10. Several adapters may coexist.
+11. EN004 remains canonical for instrument identity.
+12. Initial price/profile coverage is limited to US equities because of the current Finnhub plan.
+13. That US-only limitation must not become a core-domain restriction.
+14. Instrument profile/sector lookup is database-first.
+15. A local profile hit avoids an external API call.
+16. A local profile miss invokes the configured profile provider.
+17. Successfully retrieved profile data is persisted locally.
+18. Market price remains time-sensitive and uses its provider port.
+19. FX rates are retrieved from Frankfurter using its public API.
+20. Initial FX scope is EUR ↔ USD.
+21. Provider subscription/coverage limitations are infrastructure concerns.
+22. Provider errors are translated into provider-neutral failures.
+23. Automated tests use controlled provider boundaries.
+
+---
+
+# 26. Open Technical Decisions
+
+1. Exact Spring HTTP client.
+2. Exact adapter-selection mechanism.
+3. Spring profiles vs conditional beans vs explicit provider factories.
+4. Exact database schema for profile enrichment.
+5. Store profile data in existing EN004 tables vs dedicated enrichment tables.
+6. Exact normalization of Finnhub `finnhubIndustry`.
+7. Future profile refresh/TTL policy.
+8. Price caching strategy.
+9. FX caching strategy.
+10. Exact symbol resolution rules per provider.
+11. Whether automatic fallback chains should be introduced later.
+
+Automatic multi-provider fallback is not required now.
+
+---
+
+# 27. Migration from Previous EN005
+
+Previous EN005 already defined provider-neutral capabilities and Finnhub as the initial provider.
+
+This revision strengthens the design by making adapter separation mandatory and introducing database-first profile enrichment.
+
+```text
+BEFORE
+
 MarketDataPort
 InstrumentProfilePort
 FxRatePort
+       ↓
+FinnhubAdapter(s)
 ```
-
-Even if all three are initially implemented through Finnhub.
-
-This must allow future combinations such as:
 
 ```text
-MarketDataPort       → Finnhub
-InstrumentProfilePort → Finnhub
-FxRatePort           → ECB adapter
+AFTER
+
+MarketPriceProviderPort
+       ↓
+FinnhubMarketPriceAdapter
+
+InstrumentProfileProviderPort
+       ↓
+FinnhubInstrumentProfileAdapter
+
+FxRateProviderPort
+       ↓
+FrankfurterFxRateAdapter
 ```
 
-without changing Portfolio valuation business logic.
+plus:
+
+```text
+GetInstrumentProfile
+       ↓
+InstrumentProfileRepositoryPort
+       ├── found → return
+       └── missing
+              ↓
+InstrumentProfileProviderPort
+              ↓
+external adapter
+              ↓
+persist
+```
 
 ---
 
-# 28. Verification Criteria
+# 28. Governance of This Revision
 
-## VC-001 — API Key Configuration
-Finnhub can be configured through an external API Key.
+Because EN005 had already been approved, this is a material revision of the same technical capability.
 
-## VC-002 — Secret Protection
-The API Key is not committed, returned, traced, or logged.
+Recommended lifecycle:
 
-## VC-003 — Quote
-The backend can obtain and normalize a Finnhub quote for a supported instrument.
+```text
+Approved EN005
+      ↓
+reopen as Draft / Under Revision
+      ↓
+apply this revision
+      ↓
+review
+      ↓
+human re-approval
+```
 
-## VC-004 — Profile
-The backend can obtain and normalize Finnhub company profile data.
+A new Enabler ID is not required unless the previous EN005 has already been implemented and formally closed.
 
-## VC-005 — Sector
-The normalized profile exposes Finnhub sector/industry classification when available.
-
-## VC-006 — Exchange Independence
-Finnhub's exchange description does not replace EN004's canonical MIC.
-
-## VC-007 — USD/EUR FX
-The backend can obtain a USD → EUR rate.
-
-## VC-008 — EUR/USD FX
-The backend can obtain a EUR → USD rate.
-
-## VC-009 — Provider-Neutral Ports
-Business/domain code depends on provider-neutral ports rather than Finnhub DTOs.
-
-## VC-010 — Deterministic Calculation Inputs
-Price and FX values are exposed using decimal-safe values suitable for deterministic calculation.
-
-## VC-011 — Timestamp/Freshness
-Price and FX results include adequate freshness/source metadata.
-
-## VC-012 — Missing Data
-Missing prices, sectors, or FX values are not silently converted to zero or fabricated values.
-
-## VC-013 — Rate Limits
-Finnhub rate-limit responses are recognized and handled explicitly.
-
-## VC-014 — Authentication Failure
-Invalid API Key behavior is represented explicitly.
-
-## VC-015 — No Frontend Finnhub Calls
-The frontend does not call Finnhub directly.
-
-## VC-016 — Tests
-Automated tests execute without live Finnhub access.
-
-## VC-017 — ADR-003
-The implementation complies with the standard Spring package/dependency architecture.
-
-## VC-018 — Future Portfolio Valuation Ready
-The resulting ports provide enough data for a future feature to calculate Portfolio value in EUR and USD.
-
-## VC-019 — Future Sector Allocation Ready
-The resulting profile capability provides enough classification data for a future feature to calculate sector allocation.
+If EN005 has already been implemented/closed, create a new technical enabler to evolve the architecture instead of rewriting completed history.
 
 ---
 
-# 29. E2E / External Provider Testing
+# 29. Human Approval
 
-EN005 does not require normal application E2E tests to call the live Finnhub service.
-
-The provider integration should be tested deterministically at adapter/integration level.
-
-A manually executable provider smoke test may be provided to validate a real API Key, but:
-
-- it must be opt-in;
-- it must not run by default in CI;
-- it must not expose the API Key;
-- failure due to external rate limits/network must remain distinguishable from application test failures.
-
-Future Portfolio valuation E2E tests should stub or control the Finnhub boundary while exercising the real application stack unless a specifically approved external-provider E2E policy says otherwise.
-
----
-
-# 30. Explicit Technical Decisions
-
-1. Finnhub is the initial external provider.
-2. Finnhub authentication uses an externally configured API Key.
-3. `/quote` provides the initial market price source.
-4. `/stock/profile2` provides initial profile and sector classification.
-5. `/forex/rates` provides initial EUR/USD exchange-rate information.
-6. Three provider-neutral ports are preserved:
-   - `MarketDataPort`;
-   - `InstrumentProfilePort`;
-   - `FxRatePort`.
-7. Finnhub does not replace EN004's canonical instrument identity.
-8. Finnhub exchange descriptions are provider metadata only.
-9. Valuation arithmetic remains deterministic and outside the provider adapter.
-10. Monetary and FX calculations use decimal-safe numeric representations.
-11. Missing provider data is never fabricated.
-12. The frontend never accesses Finnhub directly.
-13. Automated tests do not require live Finnhub.
-14. Provider data freshness remains visible.
-15. Caching is allowed but must preserve freshness semantics.
-
----
-
-# 31. Open Technical Decisions
-
-The following should be resolved during specification/planning:
-
-1. Exact Spring HTTP client implementation.
-2. Exact timeout configuration.
-3. Retry policy, if any.
-4. Exact caching mechanism.
-5. Cache TTL for quote data.
-6. Cache TTL for company profile data.
-7. Cache TTL for FX data.
-8. Exact Finnhub symbol-resolution strategy for non-US instruments.
-9. Whether company profile enrichment is persisted locally or cached only.
-10. Whether price data is cached only or persisted as a snapshot.
-11. Whether FX rates are cached only or persisted as a snapshot.
-12. Whether `finnhubIndustry` is mapped directly to `sector` initially or represented as provider classification pending a canonical taxonomy.
-13. Exact decimal precision/scale for FX rates.
-14. Exact decimal precision/scale for prices.
-15. Exact behavior when a quote returns `c = 0` or missing data.
-16. Whether the future valuation feature requests both EUR and USD rates independently or derives inverse rates when mathematically safe and freshness-equivalent.
-
-These decisions must not introduce Portfolio business behavior into EN005.
-
----
-
-# 32. Human Approval
-
-Before formal specification:
-
-- [X] Purpose is correct.
-- [X] Finnhub is approved as the initial provider.
-- [X] API Key configuration is approved.
-- [X] `/quote` usage is approved.
-- [X] `/stock/profile2` usage is approved.
-- [X] `/forex/rates` usage is approved.
-- [X] EUR/USD conversion support is approved.
-- [X] Three independent provider-neutral ports are approved.
+- [X] EN005 name remains unchanged.
+- [X] Provider-neutral core/business architecture is approved.
+- [X] Separate adapter per capability is approved.
+- [X] `MarketPriceProviderPort` is approved.
+- [X] `InstrumentProfileProviderPort` is approved.
+- [X] `FxRateProviderPort` is approved.
+- [X] Finnhub is approved for market price.
+- [X] Finnhub is approved for instrument profile/sector.
+- [X] Frankfurter is approved for EUR/USD FX rates.
+- [X] Initial market-data scope is US equities only.
+- [X] US-only coverage is not encoded as a core-domain restriction.
+- [X] Independent provider configuration is approved.
+- [X] Database-first instrument-profile retrieval is approved.
+- [X] Local profile hit avoids external provider access.
+- [X] External profile result is persisted.
 - [X] EN004 remains canonical for instrument identity.
-- [X] Finnhub exchange metadata does not replace MIC.
-- [X] Sector enrichment from Finnhub is approved.
-- [X] Deterministic valuation arithmetic remains outside the adapter.
-- [X] Live Finnhub access is not required for automated CI tests.
-- [X] No Portfolio valuation UI/business behavior is introduced.
-- [X] No unapproved behavior has been added.
+- [X] Multiple provider adapters may coexist.
+- [X] No automatic provider fallback is introduced yet.
+- [X] No Portfolio valuation business behavior is introduced.
 
 **Approved by:*jaruiz*  
-**Date:*2026-09-03*  
+**Date:*2026-09-04*  
 **Status:** Approved

@@ -39,6 +39,19 @@ BUILD=1 ./start.sh    # force-rebuild the images first
 | Backend health | http://localhost:8080/actuator/health |
 | PostgreSQL | localhost:5432 (db/user/pass from `infrastructure/local/.env`) |
 
+**Optional — real market data for FD004 valuation.** Portfolio valuation needs Finnhub. With no key
+the platform runs fine but valuations resolve to `FAILED`. To use live Finnhub, set a **real** key
+(free at https://finnhub.io) as an environment variable — in the git-ignored `infrastructure/local/.env`
+(`FINNHUB_API_KEY=...`) or exported before the script:
+
+```bash
+FINNHUB_API_KEY=xxxxxxxx ./start.sh
+```
+
+`compose.yaml` forwards `FINNHUB_API_KEY` (and the optional `FINNHUB_BASE_URL`) from the shell / `.env`
+to the backend container. Never put the key in `.env.example` or commit it — it is sent to Finnhub
+only as the `X-Finnhub-Token` header and is never logged.
+
 `start.sh` / `stop.sh` / `e2e.sh` are the **canonical** entry points. Their internals may change;
 the interface must not. The frontend container (nginx) serves the Angular build and reverse-proxies
 `/api/*` to the backend container — the browser only ever talks to the frontend origin.
@@ -75,6 +88,7 @@ deliberately small and journey-focused (`product/engineering/testing-strategy.md
 | Create investment portfolio | frontend `/portfolios/new` · `POST /api/portfolios` | `specs/FD001-create-investment-portfolio/quickstart.md` |
 | Select Financial Instrument from catalog (Add Position) | frontend `/portfolios/new` Add Position — search + select · `GET /api/financial-instruments?query=` | `specs/FD002-select-financial-instrument-from-catalog/quickstart.md` |
 | List and view portfolio details | frontend **Home (`/`)** lists saved portfolios; a row opens `/portfolios/:id` · `GET /api/portfolios` · `GET /api/portfolios/{portfolioId}` | `specs/FD003-list-and-view-portfolio-details/quickstart.md` |
+| Portfolio valuation & allocation | automatic on create; shown in `/portfolios/:id` · `GET /api/portfolios/{portfolioId}/valuation` | `specs/FD004-portfolio-valuation-and-allocation/quickstart.md` |
 | Search the Financial Instrument catalog | `GET /api/financial-instruments?query=` | `specs/EN004-establish-financial-instrument-reference-data/quickstart.md` |
 
 The external REST contract is `contracts/openapi/openapi.yaml` (OpenAPI 3.0.3). Portfolio data
@@ -94,6 +108,39 @@ read-only detail at `/portfolios/:id`. Two new **read-only** endpoints — `GET 
 (returns the lean `PortfolioSummary`) and `GET /api/portfolios/{portfolioId}` (returns the existing
 `Portfolio` schema; `404` `/problems/portfolio-not-found` for an unknown id, `400` for a non-UUID
 id). No schema migration, no write path, no new business event.
+
+**FD004** values a portfolio **automatically and synchronously** right after it is created (a
+Spring in-process event → a catch-all listener, so a valuation failure never rolls back or hides the
+portfolio), using EN005's market data. Deterministic `BigDecimal` maths computes each Position's
+market value in **EUR and USD**, the portfolio totals, each Position's weight, and the sector
+allocation (canonical EUR basis). The latest snapshot only is persisted (Flyway
+`V4__portfolio_valuation.sql` — `portfolio_valuation` / `position_valuation` / `sector_allocation`,
+owned by the `portfolio` module; FD001/EN004 tables untouched) and read through the dedicated
+`GET /api/portfolios/{portfolioId}/valuation` (status `PENDING` / `COMPLETED` / `PARTIAL` /
+`FAILED`; a Portfolio with no snapshot yet → an explicit `PENDING` body). The `/portfolios/:id`
+detail is extended additively with the totals, per-Position valuation columns — market price (shown
+**with its native currency**, e.g. `200.00 USD`) / EUR value / USD value / weight / sector, each
+shown only when the Position could be valued, a missing price is **never** `0` — an explicit
+valuation-state line, and **two mandatory allocation pie charts** — *Allocation by Ticker* and
+*Allocation by Sector* — rendered as self-contained inline SVG (no charting library) and driven
+**only** by the deterministic valuation weights the API returns (the frontend never recomputes
+allocation). The sector percentages are read straight off the *Allocation by Sector* chart's legend
+(there is no separate sector list). The charts appear only when there is a valued snapshot with a
+positive EUR basis; otherwise the valuation-state line stands alone. FD003's `Portfolio` contract
+and the `PortfolioValuation` response are unchanged.
+
+### Provider integrations
+
+**EN005** established a **backend-only** Finnhub market-data integration (`marketdata` module in
+`core-service`): three provider-neutral in-process ports — latest price, company profile/sector,
+USD↔EUR FX rate — behind adapters. **FD004** consumes them (via the `portfolio` module's own
+`MarketDataGateway` ACL port — AR-062). EN005 itself is still not a user-facing capability. The
+Finnhub API key is supplied per environment via **`FINNHUB_API_KEY`** (never committed; sent as the
+`X-Finnhub-Token` header) — `compose.yaml` forwards it from the shell / `infrastructure/local/.env`
+to the backend, so `./start.sh` picks it up (see "Run the platform" above); when unset, the
+integration is disabled and every other capability keeps working. The base URL is overridable via
+**`FINNHUB_BASE_URL`** (the containerized E2E uses it to point EN005's real adapter at a local
+Finnhub stub). Automated tests never call the live provider.
 
 The Financial Instrument catalog (`market` / `financial_instrument` tables — Flyway
 `V3__financial_instrument.sql`) is populated on backend start from committed reference data under

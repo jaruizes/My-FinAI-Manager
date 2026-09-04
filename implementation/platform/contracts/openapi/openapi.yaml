@@ -222,6 +222,51 @@ paths:
                 detail: No portfolio with that identifier exists.
                 instance: /api/portfolios/6f9619ff-8b86-4d11-b42d-00c04fc964ff
 
+  /api/portfolios/{portfolioId}/valuation:
+    get:
+      operationId: getPortfolioValuation
+      tags: [Portfolio]
+      summary: Get the latest valuation snapshot for a portfolio
+      description: >
+        Returns the latest deterministic valuation of the portfolio: status, when it was
+        calculated, total value in EUR and USD, one entry per position (market price, native / EUR /
+        USD value, portfolio weight, sector, price-observed-at — each present only when the position
+        could be valued), and the sector allocation. A portfolio that exists but has no valuation
+        snapshot yet returns status `PENDING` with null monetary fields. Read-only — no value can be
+        edited. A `{portfolioId}` segment that is not a valid UUID yields `400`; a well-formed id
+        that is not the current investor's yields `404`. Missing market data is never shown as `0`.
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          description: The portfolio identifier. Must be a UUID — a non-UUID segment yields `400`.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The latest valuation snapshot (or a `PENDING` placeholder if none computed yet).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioValuation'
+        '400':
+          description: >
+            The `{portfolioId}` path segment is not a valid identifier (not a UUID). Rejected
+            before any lookup; the body carries no guaranteed problem `type`.
+        '404':
+          description: No portfolio with this id belongs to the current investor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: /problems/portfolio-not-found
+                title: Portfolio not found
+                status: 404
+                detail: No portfolio with that identifier exists.
+                instance: /api/portfolios/6f9619ff-8b86-4d11-b42d-00c04fc964ff
+
   /api/financial-instruments:
     get:
       operationId: searchFinancialInstruments
@@ -447,6 +492,120 @@ components:
           description: >
             Decimal string in `currency`, or null when the investor did not provide it
             (never 0, never inferred).
+
+    PortfolioValuation:
+      type: object
+      additionalProperties: false
+      description: >
+        The latest deterministic valuation of one portfolio (FD004). Decimal values are strings,
+        full precision — the 2-decimal display rounding is a client concern. A missing value is
+        `null`, never `0`.
+      required: [portfolioId, status, positions, sectors]
+      properties:
+        portfolioId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, PARTIAL, FAILED]
+          description: >
+            PENDING — no snapshot computed yet. COMPLETED — every position valued (price + needed
+            FX); a missing sector alone does not prevent COMPLETED. PARTIAL — some position
+            unvalued, a needed FX rate missing, or only one total producible. FAILED — no position
+            could be valued, or neither total could be produced.
+        calculatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this snapshot was computed. null only for the PENDING placeholder.
+        totalValueEUR:
+          type: string
+          nullable: true
+          description: Decimal string. null when not producible (never "0").
+        totalValueUSD:
+          type: string
+          nullable: true
+          description: Decimal string. null when not producible (never "0").
+        marketDataAsOf:
+          type: string
+          format: date-time
+          nullable: true
+          description: Oldest market-price observation time among the valued positions.
+        fxDataAsOf:
+          type: string
+          format: date-time
+          nullable: true
+          description: Oldest FX-rate observation time among the rates used.
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionValuation'
+        sectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectorAllocation'
+
+    PositionValuation:
+      type: object
+      additionalProperties: false
+      required: [ticker, market, quantity, nativeCurrency, valued, sector]
+      properties:
+        ticker:
+          type: string
+        market:
+          type: string
+          description: Market Identifier Code (MIC).
+        quantity:
+          type: string
+          description: Decimal string.
+        nativeCurrency:
+          type: string
+          enum: [EUR, USD]
+        valued:
+          type: boolean
+          description: >
+            true when a market price was available. When false every monetary field below is null
+            (never "0").
+        marketPrice:
+          type: string
+          nullable: true
+        nativeMarketValue:
+          type: string
+          nullable: true
+          description: quantity x marketPrice, full precision.
+        valueInEUR:
+          type: string
+          nullable: true
+        valueInUSD:
+          type: string
+          nullable: true
+        portfolioWeight:
+          type: string
+          nullable: true
+          description: >
+            Fraction of the portfolio's total EUR value (e.g. "0.761904761905"). The client
+            multiplies by 100 and formats to 2 decimals. null when there is no EUR basis.
+        sector:
+          type: string
+          description: Provider classification string shown directly, or "Unclassified".
+        priceObservedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    SectorAllocation:
+      type: object
+      additionalProperties: false
+      required: [sector, sectorValueEUR, sectorWeight]
+      properties:
+        sector:
+          type: string
+        sectorValueEUR:
+          type: string
+          description: Sum of valueInEUR for that sector's valued positions, full precision.
+        sectorWeight:
+          type: string
+          description: Fraction (sectorValueEUR / totalValueEUR); client multiplies by 100.
 
     Problem:
       type: object

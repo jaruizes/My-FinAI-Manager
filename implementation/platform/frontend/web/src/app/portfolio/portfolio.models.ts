@@ -29,3 +29,56 @@ export type DetailState =
   | { kind: 'loaded'; portfolio: PortfolioView }
   | { kind: 'not-found' }
   | { kind: 'error' };
+
+/* ---- FD004 — Portfolio Valuation & Allocation (contract `PortfolioValuation` schema) ---- */
+
+export type ValuationStatus = 'PENDING' | 'COMPLETED' | 'PARTIAL' | 'FAILED';
+
+/** One position's valuation. Monetary fields are `null` (never "0") when `valued` is false. */
+export interface PositionValuationView {
+  ticker: string;
+  market: string;
+  quantity: string;
+  nativeCurrency: 'EUR' | 'USD';
+  valued: boolean;
+  marketPrice: string | null;
+  nativeMarketValue: string | null;
+  valueInEUR: string | null;
+  valueInUSD: string | null;
+  /** fraction of the portfolio's total EUR value, e.g. "0.761904761905" */
+  portfolioWeight: string | null;
+  sector: string;
+  priceObservedAt: string | null;
+}
+
+/** One sector's share of the portfolio, in the canonical EUR basis. */
+export interface SectorAllocationView {
+  sector: string;
+  sectorValueEUR: string;
+  /** fraction, e.g. "0.761904761905" */
+  sectorWeight: string;
+}
+
+/**
+ * One slice of an allocation pie chart (FD004 §17.1/§17.2). `fraction` is the deterministic
+ * backend weight (`portfolioWeight` for the ticker chart, `sectorWeight` for the sector chart) —
+ * the chart NEVER recomputes it (§22 BR-016).
+ */
+export interface AllocationSlice {
+  label: string;
+  /** 0..1 — the backend weight, used verbatim. */
+  fraction: number;
+}
+
+/** The latest valuation snapshot for a portfolio. */
+export interface PortfolioValuationView {
+  portfolioId: string;
+  status: ValuationStatus;
+  calculatedAt: string | null;
+  totalValueEUR: string | null;
+  totalValueUSD: string | null;
+  marketDataAsOf: string | null;
+  fxDataAsOf: string | null;
+  positions: PositionValuationView[];
+  sectors: SectorAllocationView[];
+}

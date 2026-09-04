@@ -18,9 +18,35 @@ services:
     ports: !override
       - "15432:5432"
 
+  # FD004 — the external market-data boundary for E2E. A tiny dependency-free Node stub (built by
+  # e2e.sh) that serves canned Finnhub /quote + /stock/profile2 AND Frankfurter /v1/latest (FX)
+  # responses. EN005's REAL adapters / mappers / cache / error-translation run against it — no live
+  # finnhub.io / api.frankfurter.dev, no outbound Internet (SC-010).
+  finnhub-stub:
+    image: finai/finnhub-stub:local
+    pull_policy: never
+    build:
+      context: ../../e2e/finnhub-stub
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 3s
+
   backend:
     ports: !override
       - "18080:8080"
+    environment:
+      # EN005 talks to the stub instead of the live providers. The Finnhub key is a non-secret
+      # placeholder (the stub ignores it) but must be non-blank so the integration is enabled.
+      # Frankfurter needs no key; only its base URL is redirected.
+      FINNHUB_API_KEY: e2e-stub
+      FINNHUB_BASE_URL: http://finnhub-stub:8080
+      FRANKFURTER_BASE_URL: http://finnhub-stub:8080
+    depends_on:
+      finnhub-stub:
+        condition: service_healthy
 
   frontend:
     ports: !override

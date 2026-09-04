@@ -1,5 +1,6 @@
 package com.myfinaimanager.core.portfolio.business;
 
+import com.myfinaimanager.core.portfolio.domain.events.PortfolioCreatedEvent;
 import com.myfinaimanager.core.portfolio.domain.exceptions.PortfolioValidationException;
 import com.myfinaimanager.core.portfolio.domain.model.Currency;
 import com.myfinaimanager.core.portfolio.domain.model.InvestorId;
@@ -20,6 +21,7 @@ import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 /**
@@ -45,15 +47,18 @@ public final class CreatePortfolioService implements CreatePortfolioUseCase {
     private final DefaultInvestorProvider defaultInvestorProvider;
     private final InstrumentCatalog instrumentCatalog;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     public CreatePortfolioService(PortfolioRepository repository,
                                   DefaultInvestorProvider defaultInvestorProvider,
                                   InstrumentCatalog instrumentCatalog,
-                                  Clock clock) {
+                                  Clock clock,
+                                  ApplicationEventPublisher events) {
         this.repository = Objects.requireNonNull(repository);
         this.defaultInvestorProvider = Objects.requireNonNull(defaultInvestorProvider);
         this.instrumentCatalog = Objects.requireNonNull(instrumentCatalog);
         this.clock = Objects.requireNonNull(clock);
+        this.events = Objects.requireNonNull(events);
     }
 
     @Override
@@ -87,6 +92,10 @@ public final class CreatePortfolioService implements CreatePortfolioUseCase {
 
         if (!replayed) {
             recordBusinessOutcomes(saved);
+            // FD004 FR-001/FR-004: the save above has already committed (its own transaction), so a
+            // synchronous listener runs post-commit, on this request thread, to value the portfolio.
+            // A valuation failure is contained by the listener and never reaches this caller (FR-002).
+            events.publishEvent(new PortfolioCreatedEvent(saved.id()));
         }
         return new CreatePortfolioResult(saved, replayed);
     }

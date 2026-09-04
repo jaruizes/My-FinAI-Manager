@@ -46,6 +46,13 @@ services:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/finai}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-finai}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-finai_local_dev}
+      # EN005 / FD004 — Finnhub market data. Taken from the shell environment or infrastructure/
+      # local/.env (git-ignored). BLANK ⇒ the integration is disabled and portfolio valuations come
+      # back FAILED, while every other capability keeps working. The key is a real secret: put it
+      # ONLY in .env or export it before ./start.sh — never in .env.example or the repo. It is sent
+      # to Finnhub as the X-Finnhub-Token header, never a URL parameter.
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      FINNHUB_BASE_URL: ${FINNHUB_BASE_URL:-https://finnhub.io/api/v1}
     ports:
       - "8080:8080"
     depends_on:

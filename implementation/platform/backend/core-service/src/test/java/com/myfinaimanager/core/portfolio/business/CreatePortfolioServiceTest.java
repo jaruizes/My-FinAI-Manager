@@ -47,6 +47,7 @@ class CreatePortfolioServiceTest {
 
     @Mock private PortfolioRepository repository;
     @Mock private DefaultInvestorProvider defaultInvestorProvider;
+    @Mock private org.springframework.context.ApplicationEventPublisher events;
 
     /** Fake catalog: every {@code (ticker, market, currency)} triple added here is selectable. */
     private final FakeCatalog catalog = new FakeCatalog();
@@ -58,7 +59,7 @@ class CreatePortfolioServiceTest {
         catalog.selectable.clear();
         catalog.allow("ASML", "XAMS", "EUR");
         catalog.allow("MSFT", "XNAS", "USD");
-        service = new CreatePortfolioService(repository, defaultInvestorProvider, catalog, CLOCK);
+        service = new CreatePortfolioService(repository, defaultInvestorProvider, catalog, CLOCK, events);
     }
 
     private static final class FakeCatalog implements InstrumentCatalog {

@@ -47,6 +47,43 @@ app:
     exchange-mic-mapping-file: "classpath:reference-data/yahoo-exchange-to-mic-mapping.csv"
     suffix-override-file: "classpath:reference-data/yahoo-exchange-suffix-overrides.csv"
 
+# EN005 — Finnhub market data integration (marketdata module).
+# The API key is supplied per environment via FINNHUB_API_KEY and is NEVER committed. When it is
+# unset the integration is DISABLED: the application starts normally, a one-time INFO log
+# `event=FinnhubIntegrationDisabled` is emitted, and every marketdata port call throws
+# MarketDataNotConfiguredException. The key is sent to Finnhub as the `X-Finnhub-Token` request
+# header — never a URL query parameter — so it cannot appear in a URL, log line, or exception.
+# EN005 Revision 2 — provider selection is independent per capability (enabler §7, §16). Each value
+# names the adapter wired for that capability; a value naming an unregistered provider is a
+# misconfiguration. Initial assignment: price + profile → Finnhub (US equities), FX → Frankfurter.
+market-data:
+  price:
+    provider: finnhub
+  profile:
+    provider: finnhub
+  fx:
+    provider: frankfurter
+
+finnhub:
+  api-key: ${FINNHUB_API_KEY:}
+  # Overridable per environment (FINNHUB_BASE_URL) so the containerized E2E can point EN005's real
+  # adapter at a controlled Finnhub stub (FD004 §25). The production default is unchanged.
+  base-url: ${FINNHUB_BASE_URL:https://finnhub.io/api/v1}
+  connect-timeout: 2s
+  read-timeout: 5s
+  cache:
+    quote-ttl: 45s
+    profile-ttl: 24h    # unused after Revision 2 (instrument profile is database-first); kept until the field is removed
+
+# EN005 Revision 2 — FX rates come from Frankfurter (ECB data), a keyless public API. No secret.
+# base-url is overridable (FRANKFURTER_BASE_URL) so the containerized E2E can point at a stub.
+frankfurter:
+  base-url: ${FRANKFURTER_BASE_URL:https://api.frankfurter.dev}
+  connect-timeout: 2s
+  read-timeout: 5s
+  cache:
+    fx-ttl: 10m
+
 management:
   endpoints:
     web:

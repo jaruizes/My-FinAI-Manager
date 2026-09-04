@@ -257,6 +257,16 @@
                         <!-- EN004: same rationale for the financialinstrument module. -->
                         <exclude>com/myfinaimanager/core/financialinstrument/infrastructure/config/**</exclude>
                         <exclude>com/myfinaimanager/core/financialinstrument/infrastructure/persistence/entity/**</exclude>
+                        <!-- EN005: same rationale for the marketdata module — typed config/wiring
+                             (no branch logic) and pure Jackson provider DTO records. Behaviour is
+                             covered by FinnhubConfigurationTest and the mapper/adapter tests. -->
+                        <exclude>com/myfinaimanager/core/marketdata/infrastructure/config/**</exclude>
+                        <exclude>com/myfinaimanager/core/marketdata/infrastructure/finnhub/dto/**</exclude>
+                        <!-- EN005 Revision 2: Frankfurter FX provider DTOs; financialinstrument
+                             instrument-profile provider DTOs + typed provider config. -->
+                        <exclude>com/myfinaimanager/core/marketdata/infrastructure/frankfurter/dto/**</exclude>
+                        <exclude>com/myfinaimanager/core/financialinstrument/infrastructure/finnhub/dto/**</exclude>
+                        <exclude>com/myfinaimanager/core/financialinstrument/infrastructure/finnhub/config/**</exclude>
                     </excludes>
                 </configuration>
             </plugin>
