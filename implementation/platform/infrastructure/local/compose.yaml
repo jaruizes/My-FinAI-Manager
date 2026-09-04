@@ -2,7 +2,12 @@
 #
 # EN001 introduced PostgreSQL. EN002 makes the WHOLE platform run as containers: `postgres`,
 # `backend` (Spring Boot), `frontend` (Angular build served by nginx), and an opt-in `e2e`
-# (Playwright) service behind the `e2e` profile.
+# (Playwright) service behind the `e2e` profile. EN006 / ADR-004 adds the local AI observability
+# stack: `otel-collector`, `jaeger`, `prometheus`, `grafana` — core-service exports OTLP traces and
+# metrics to the Collector, which fans out traces to Jaeger and metrics to Prometheus; Grafana is
+# auto-provisioned with a Prometheus data source and the AI observability dashboard. Config lives
+# in ../observability/ (version-controlled, mounted read-only — see contracts/ai-telemetry.md and
+# ADR-004 in the EN006 spec/enabler).
 #
 # Started / stopped through implementation/platform/start.sh and stop.sh.
 # Browser E2E is run through implementation/platform/e2e.sh (isolated Compose project).
@@ -53,11 +58,18 @@ services:
       # to Finnhub as the X-Finnhub-Token header, never a URL parameter.
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
       FINNHUB_BASE_URL: ${FINNHUB_BASE_URL:-https://finnhub.io/api/v1}
+      # EN006 / ADR-004 — export AI telemetry to the local OpenTelemetry Collector. No AI provider
+      # credential is ever carried by this configuration (there is none — EN006 ships no live
+      # provider, resolved Q1).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-my-finai-manager-core}
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
       interval: 3s
@@ -77,6 +89,69 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # EN006 / ADR-004 — local AI observability stack. Receives OTLP traces/metrics from `backend`
+  # and fans them out: traces -> jaeger, metrics -> a Prometheus-scrapeable endpoint. Config is
+  # version-controlled (../observability/otel-collector-config.yaml) and never dumps raw
+  # prompt/completion bodies.
+  # No Docker HEALTHCHECK here: the otel/opentelemetry-collector-contrib image ships no shell and
+  # no wget/curl binary (verified), so a container-internal HTTP probe isn't possible without adding
+  # one ourselves. `backend`/`jaeger`/`prometheus` only need it to have *started*
+  # (`service_started`); start.sh separately confirms the container is actually running.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.110.0
+    volumes:
+      - ../observability/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+
+  # Trace store + UI (contracts/ai-telemetry.md — the ai.usecase / ai.invocation span pair).
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:16686/ >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # Metrics store, scraping the Collector's Prometheus-exporter endpoint (../observability/prometheus.yml).
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:9090/-/ready >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # Auto-provisioned dashboard (Prometheus data source + the AI observability dashboard — FR-051).
+  # No manual "Add data source" / "Import dashboard" step is ever required.
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health >/dev/null 2>&1 || exit 1"]
       interval: 3s
       timeout: 5s
       retries: 20

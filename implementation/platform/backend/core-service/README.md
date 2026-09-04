@@ -188,6 +188,57 @@ behind adapters.
   data only). Tests use Spring `MockRestServiceServer` — **no** live Finnhub, no key, no network;
   an opt-in `FinnhubProviderSmokeTest` (`FINNHUB_SMOKE=1`) validates a real key locally.
 
+## `ai` module (EN006 — provider-neutral AI model integration)
+
+A fourth functional module, ADR-003 layout — `domain/{model,ports,exceptions}`, `business`,
+`infrastructure/{provider/local,prompt,guardrails,tokencount,observability,api,config}`. Provides a
+**provider-neutral** capability for invoking AI/LLM models. EN006 ships **no live AI provider**
+(resolved Q1) — no API key, no vendor SDK, no business AI feature; it is horizontal infrastructure a
+future feature will consume.
+
+- **`AiModelPort.generate(AiRequest) → AiResponse`** — the one generic port. Its **only**
+  implementation is `LocalAiModelAdapter`: deterministic, in-process, no network call, no
+  credential — proves the port and drives the observability chain below.
+- **`AiInvocationPolicy`** (`business`, `implements GenerateAiUseCase`) — the single orchestrator:
+  task validation → prompt composition (`PromptService` + `PromptRepositoryPort` →
+  `ClasspathPromptRepository`, `src/main/resources/prompts/global-system-v1.txt`) → context
+  budgeting/redaction (`ContextBudgetService`) → token/cost budget enforcement
+  (`TokenCounterPort` → `HeuristicTokenCounter`, `ceil(chars/4)`) → input guardrail
+  (`InputGuardrailPort` → `RuleBasedInputGuardrail`) → `AiModelPort.generate` (bounded timeout via
+  `CompletableFuture.get`, bounded retry for `AiProviderUnavailable`/`RateLimited` only) → output
+  guardrail (`OutputGuardrailPort` → `RuleBasedOutputGuardrail`) → structured-output validation
+  (`StructuredOutputValidator`, a **pure domain calculator** — no Jackson, no JSON-schema library) →
+  telemetry (`TelemetryPort`/`TelemetryScope` → `AiTelemetryRecorder`, Micrometer Observation +
+  MeterRegistry). Every step is unit-tested (RED-first); no live provider is ever required.
+- **Eleven provider-neutral exceptions** (`AiException` base) — `AiProviderUnavailable`,
+  `RateLimited`, `AuthenticationFailed`, `RequestTooLarge`, `TokenBudgetExceeded`,
+  `CostBudgetExceeded`, `Timeout`, `InvalidResponse`, `GuardrailRejected`,
+  `StructuredOutputInvalid`, `ConfigurationError`.
+- **`AiDiagnosticEndpoint`** — an internal Actuator endpoint (`@Endpoint(id = "aidiagnostic")` →
+  `POST /actuator/aidiagnostic`, note the URL is the id lowercased with no separator, per Spring's
+  own convention e.g. `threadDump`→`/actuator/threaddump`) that triggers one deterministic
+  invocation. **Not** a business API — excluded from `openapi.yaml`, documented in
+  `specs/EN006-…/contracts/ai-diagnostic-endpoint.md`.
+- **Observability (ADR-004)** — OpenTelemetry export via Spring Boot's native path
+  (`micrometer-tracing-bridge-otel` + `opentelemetry-exporter-otlp` for traces,
+  `micrometer-registry-otlp` for metrics — all three are required; the metrics registry is easy to
+  miss since traces work without it). `AiTelemetryRecorder` emits the `ai.usecase` → `ai.invocation`
+  nested span pair (`gen_ai.*` + `ai.*` attributes) and seven `ai_*` Prometheus metrics — never a raw
+  prompt/response body, credential, or user/Portfolio identifier. The local Compose stack
+  (`otel-collector`, `jaeger`, `prometheus`, `grafana`) is wired into `./start.sh` / `./stop.sh`;
+  Grafana's Prometheus data source and the AI observability dashboard are auto-provisioned
+  (`infrastructure/observability/`), zero manual setup.
+- **Configuration** — `ai.*` in `application.yml` (`default-provider: local`, token/character/cost
+  limits, timeout, retry policy) bound to `AiProperties` (`@ConfigurationProperties`), mapped by
+  `AiModuleConfiguration` to the plain `AiInvocationSettings` record `ai.business`/`ai.domain`
+  actually depend on (they never see the Spring-annotated type).
+- **No** persistence / Flyway migration, **no** external business REST API, **no** frontend, **no**
+  LLM provider SDK, **no** valuation arithmetic. Tests: 124 unit tests (incl. every domain-model
+  validation branch, the full `AiInvocationPolicy` sequencing/retry/timeout matrix using a
+  deterministic local adapter and a test-only failing double, and `AiTelemetryRecorder` against
+  Micrometer's `TestObservationRegistry`) plus one full-context `PlatformIntegrationIT` case proving
+  real DI wiring end to end — none require network access or a live AI provider.
+
 ### Consumed by `portfolio` for FD002 (AR-062)
 
 The `portfolio` module validates that every Position on `POST /api/portfolios` references an active

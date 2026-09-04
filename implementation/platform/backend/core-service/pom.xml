@@ -51,6 +51,27 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
         <!--
+          EN006 / research D1: the platform's first OpenTelemetry telemetry-export dependency
+          (`OpenTelemetry` is `PREFERRED` per technology-policy.md). Spring Boot's own
+          Micrometer-Tracing + OTLP-exporter path — no direct opentelemetry-sdk wiring. Versions
+          come from spring-boot-starter-parent's dependency management (no explicit <version>).
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+        <!-- The OTLP *metrics* registry (distinct from the trace exporter above) — without this,
+             management.otlp.metrics.* has nothing to bind an OtlpMeterRegistry to and metrics are
+             silently never exported (found during EN006 runtime verification). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-otlp</artifactId>
+        </dependency>
+        <!--
           EN003 / ADR-003: Spring Data JPA is the standard relational-persistence abstraction for
           Spring components. Portfolio persistence uses Spring Data JPA; Flyway keeps owning the
           schema (spring.jpa.hibernate.ddl-auto = none). spring-jdbc / JdbcClient remain on the
@@ -91,6 +112,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- EN006: TCK assertions for AiTelemetryRecorderTest (Micrometer Observation spans). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-observation-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

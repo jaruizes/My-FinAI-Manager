@@ -84,20 +84,56 @@ frankfurter:
   cache:
     fx-ttl: 10m
 
+# EN006 — provider-neutral AI model integration (ai module). No live AI provider is wired
+# (resolved Q1) — `default-provider: local` selects the shipped deterministic LocalAiModelAdapter,
+# which needs no key and makes no outbound call. Limits/timeout/retry are placeholder defaults
+# (research.md D-plan; spec.md A8) — safe to tune without any code change.
+ai:
+  default-provider: local
+  default-model: local-deterministic-v1
+  limits:
+    max-input-tokens: 8000
+    max-output-tokens: 1000
+    max-total-tokens: 9000
+    max-input-characters: 20000
+    max-estimated-cost: 0.50
+  timeout:
+    connect: 2s
+    read: 5s
+  retry:
+    max-attempts: 2
+    backoff: 200ms
+
 management:
   endpoints:
     web:
       exposure:
-        # EN001 exposes only health. No metrics/env/etc.
-        include: health
+        # health (EN001) + aidiagnostic (EN006 — internal observability-verification tool only,
+        # NOT a business API; contracts/ai-diagnostic-endpoint.md). Actuator endpoint URLs are the
+        # lowercased id with no separator, so @Endpoint(id = "aidiagnostic") -> /actuator/aidiagnostic.
+        include: health,aidiagnostic
   endpoint:
     health:
       show-details: always
       probes:
         enabled: true
+    aidiagnostic:
+      enabled: true
   health:
     db:
       enabled: true
+  # EN006 / research D1 — the platform's first OpenTelemetry telemetry export. Sampled 100% for
+  # local dev; exported to the local OTel Collector (ADR-004). No AI provider credential is ever
+  # carried by this configuration.
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/metrics
 
 # Structured, machine-readable logging (DR-029), via Spring Boot's built-in structured logging
 # in Elastic Common Schema JSON. No custom logback config — a `logback-spring.xml` that includes

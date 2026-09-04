@@ -186,4 +186,12 @@ class StandardArchitectureRulesTest {
                     .orShould().haveRawType(float.class)
                     .orShould().haveRawType(Double.class)
                     .orShould().haveRawType(Float.class);
+
+    // EN006 / research D8 / FR-004, FR-057: the provider-neutral AI core stays free of the one
+    // shipped adapter and every other ai.infrastructure class (a specialization of the generic
+    // domain/business -> infrastructure rules above, kept as its own named, EN006-traceable check).
+    @ArchTest
+    static final ArchRule ai_domain_and_business_are_free_of_infrastructure_provider_types =
+            noClasses().that().resideInAnyPackage("..core.ai.domain..", "..core.ai.business..")
+                    .should().dependOnClassesThat().resideInAPackage("..core.ai.infrastructure..");
 }

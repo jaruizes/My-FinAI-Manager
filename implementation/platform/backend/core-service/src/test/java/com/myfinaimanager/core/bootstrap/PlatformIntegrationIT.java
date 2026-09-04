@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -55,5 +58,25 @@ class PlatformIntegrationIT extends PostgresContainerSupport {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).contains("\"status\":\"UP\"");
         assertThat(response.getBody()).contains("\"db\"");
+    }
+
+    /**
+     * EN006 — proves the whole {@code ai} module wires up in the real application context: every
+     * port resolves to its one implementation ({@code LocalAiModelAdapter} selected by
+     * {@code ai.default-provider=local}), Micrometer/Actuator auto-configuration is compatible, and
+     * the internal diagnostic endpoint (FR-054; contract {@code ai-diagnostic-endpoint.md}) responds
+     * without leaking the prompt/response body.
+     */
+    @Test
+    void ai_diagnostic_endpoint_triggers_a_real_deterministic_invocation() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        var response = rest.postForEntity(
+                "/actuator/aidiagnostic", new HttpEntity<>("{}", headers), String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getBody()).contains("\"requestId\"").contains("\"latencyMs\"")
+                .contains("\"totalTokens\"");
+        assertThat(response.getBody()).doesNotContain("Local deterministic response");
     }
 }

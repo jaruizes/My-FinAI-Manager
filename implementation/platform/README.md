@@ -38,6 +38,9 @@ BUILD=1 ./start.sh    # force-rebuild the images first
 | Backend | http://localhost:8080 |
 | Backend health | http://localhost:8080/actuator/health |
 | PostgreSQL | localhost:5432 (db/user/pass from `infrastructure/local/.env`) |
+| Jaeger (AI traces — EN006) | http://localhost:16686 |
+| Prometheus (AI metrics — EN006) | http://localhost:9090 |
+| Grafana (AI dashboard — EN006) | http://localhost:3000 |
 
 **Optional — real market data for FD004 valuation.** Portfolio valuation needs Finnhub. With no key
 the platform runs fine but valuations resolve to `FAILED`. To use live Finnhub, set a **real** key
@@ -141,6 +144,20 @@ to the backend, so `./start.sh` picks it up (see "Run the platform" above); when
 integration is disabled and every other capability keeps working. The base URL is overridable via
 **`FINNHUB_BASE_URL`** (the containerized E2E uses it to point EN005's real adapter at a local
 Finnhub stub). Automated tests never call the live provider.
+
+**EN006** established a **provider-neutral AI model integration** capability (`ai` module in
+`core-service`): a generic `AiModelPort` behind an invocation policy that centralizes prompt
+composition/versioning, rule-based input/output guardrails, token/context/cost budget enforcement,
+provider-neutral error handling with bounded timeout/retry, and OpenTelemetry-based observability.
+EN006 ships **no live AI provider** — only a deterministic, network-free local/stub adapter, so it
+needs no API key and defines no business AI feature; a real provider (Anthropic/OpenAI/Bedrock/
+Vertex) is deferred to whichever future feature first needs one. Every AI invocation is traced and
+metriced through a local Docker Compose observability stack (`ADR-004`) — an OpenTelemetry
+Collector, Jaeger, Prometheus, and an auto-provisioned Grafana dashboard, all started/stopped by
+`./start.sh` / `./stop.sh` alongside the rest of the platform. The internal
+`POST /actuator/aidiagnostic` endpoint (not a business API, not in `openapi.yaml`) triggers one
+deterministic invocation so the whole chain can be inspected end to end. No product/portfolio
+behavior is affected; EN006 is purely additive infrastructure for future AI-assisted features.
 
 The Financial Instrument catalog (`market` / `financial_instrument` tables — Flyway
 `V3__financial_instrument.sql`) is populated on backend start from committed reference data under

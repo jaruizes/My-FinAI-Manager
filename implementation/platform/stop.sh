@@ -34,6 +34,9 @@ ENV_ARGS=()
 [[ -f "${ENV_FILE}" ]] && ENV_ARGS=(--env-file "${ENV_FILE}")
 
 info "stopping the platform (docker compose down) ..."
+# `down` with no service names tears down every service in compose.yaml — this already includes
+# the EN006/ADR-004 observability stack (otel-collector, jaeger, prometheus, grafana); no separate
+# teardown step is needed for them.
 "${DC[@]}" "${ENV_ARGS[@]}" -f "${COMPOSE_FILE}" down --remove-orphans
 
 # Legacy cleanup: earlier versions ran host processes and wrote PID files here.

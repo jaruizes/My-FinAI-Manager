@@ -5,9 +5,13 @@
 # The COMPLETE platform runs as containers through Docker Compose:
 #
 #   Docker Compose
-#     ├── postgres   (PostgreSQL 16)
-#     ├── backend    (core-service, Spring Boot)  -> http://localhost:8080
-#     └── frontend   (Angular build served by nginx, /api proxied to backend) -> http://localhost:4200
+#     ├── postgres        (PostgreSQL 16)
+#     ├── backend         (core-service, Spring Boot)  -> http://localhost:8080
+#     ├── frontend        (Angular build served by nginx, /api proxied to backend) -> http://localhost:4200
+#     ├── otel-collector  (EN006/ADR-004 — receives AI telemetry from backend)
+#     ├── jaeger          (EN006/ADR-004 — trace UI) -> http://localhost:16686
+#     ├── prometheus      (EN006/ADR-004 — AI metrics) -> http://localhost:9090
+#     └── grafana         (EN006/ADR-004 — AI observability dashboard) -> http://localhost:3000
 #
 # There is NO host Spring Boot process and NO host Angular dev server. Docker is the only runtime
 # dependency for running the platform. (Local Java/Node tooling is still used for building/testing.)
@@ -36,6 +40,9 @@ FRONTEND_IMAGE="finai/web:local"
 BACKEND_PORT=8080
 FRONTEND_PORT=4200
 POSTGRES_PORT=5432
+JAEGER_PORT=16686
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3000
 
 READY_TIMEOUT=180   # seconds to wait for all services healthy
 
@@ -78,7 +85,8 @@ DC_ENV=("${DC[@]}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
 
 # A port in use is only a problem if it is NOT our own compose project (re-running start.sh is fine).
 own_project_running() { "${DC_ENV[@]}" ps --status running 2>/dev/null | grep -q .; }
-for pair in "PostgreSQL:${POSTGRES_PORT}" "backend:${BACKEND_PORT}" "frontend:${FRONTEND_PORT}"; do
+for pair in "PostgreSQL:${POSTGRES_PORT}" "backend:${BACKEND_PORT}" "frontend:${FRONTEND_PORT}" \
+            "jaeger:${JAEGER_PORT}" "prometheus:${PROMETHEUS_PORT}" "grafana:${GRAFANA_PORT}"; do
   name="${pair%%:*}"; port="${pair##*:}"
   if port_in_use "${port}" && ! own_project_running; then
     die "port ${port} (${name}) is already in use by another process. Free it (or stop that process) and retry."
@@ -124,18 +132,27 @@ pull_native "${PG_IMAGE}"
 
 # --- start --------------------------------------------------------------
 
-info "starting the platform (postgres + backend + frontend) ..."
-"${DC_ENV[@]}" up -d --no-build postgres backend frontend
+info "starting the platform (postgres + backend + frontend + AI observability stack) ..."
+"${DC_ENV[@]}" up -d --no-build postgres backend frontend otel-collector jaeger prometheus grafana
 
 # --- wait for health ---------------------------------------------------
+#
+# postgres/backend/frontend/jaeger/prometheus/grafana all declare a Docker HEALTHCHECK and must
+# report "healthy". otel-collector declares none (its image ships no shell/wget to probe with —
+# compose.yaml explains why) — it only needs to be *running*, checked separately below.
 
 info "waiting for all services to become healthy (timeout ${READY_TIMEOUT}s) ..."
 deadline=$(( $(date +%s) + READY_TIMEOUT ))
 while :; do
   status="$("${DC_ENV[@]}" ps --format '{{.Service}}={{.Health}}' 2>/dev/null | sort | tr '\n' ' ')"
+  running="$("${DC_ENV[@]}" ps --format '{{.Service}}={{.State}}' 2>/dev/null | sort | tr '\n' ' ')"
   if echo "${status}" | grep -q 'postgres=healthy' \
      && echo "${status}" | grep -q 'backend=healthy' \
-     && echo "${status}" | grep -q 'frontend=healthy'; then
+     && echo "${status}" | grep -q 'frontend=healthy' \
+     && echo "${status}" | grep -q 'jaeger=healthy' \
+     && echo "${status}" | grep -q 'prometheus=healthy' \
+     && echo "${status}" | grep -q 'grafana=healthy' \
+     && echo "${running}" | grep -q 'otel-collector=running'; then
     break
   fi
   if echo "${status}" | grep -q 'unhealthy'; then
@@ -161,6 +178,13 @@ cat <<EOF
         Backend        : http://localhost:${BACKEND_PORT}
         Backend health : http://localhost:${BACKEND_PORT}/actuator/health
         PostgreSQL     : localhost:${POSTGRES_PORT}
+
+        AI observability (EN006 / ADR-004):
+        Jaeger (traces)     : http://localhost:${JAEGER_PORT}
+        Prometheus (metrics): http://localhost:${PROMETHEUS_PORT}
+        Grafana (dashboard) : http://localhost:${GRAFANA_PORT}
+        Trigger a deterministic AI invocation to see it end to end:
+          curl -X POST http://localhost:${BACKEND_PORT}/actuator/aidiagnostic
 
         Logs : ${DC[*]} -f ${COMPOSE_FILE} logs -f
         Stop : ${PLATFORM_DIR}/stop.sh
