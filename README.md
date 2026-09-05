@@ -41,6 +41,14 @@ The long-term goal is not to build an *AI stock picker*, but a system capable of
 
 My-FinAI-Manager is currently in the early stages of development. These are the main capabilities it currently supports:
 
+- **Create an investment portfolio** — name a portfolio and add positions (ticker, market, quantity, currency, optional purchase date/price).
+- **Select instruments from a reference catalog** — positions reference active, catalogued listings rather than free-text symbols.
+- **List and view portfolios** — a home list of saved portfolios and a read-only detail view of each one's positions.
+- **Automatic, deterministic portfolio valuation** — right after creation, each position is priced and converted to EUR/USD, giving total portfolio value, per-position weight, and sector allocation, shown as two allocation charts (by ticker and by sector) on the portfolio detail page.
+- **AI-generated portfolio analysis** — an automatic, asynchronous analysis of each portfolio's diversification, key insights, and risks, computed *from* the deterministic valuation above (never recalculated by the model) and shown on the portfolio detail page; the investor can also request a new analysis at any time.
+
+> **Market data coverage note:** live market pricing and company/sector data currently come from Finnhub's free plan, whose initial supported market-data universe is **US equities only** (e.g. NASDAQ/NYSE tickers). Portfolio valuation and, in turn, AI-generated analysis are therefore fully functional only for US-listed positions today; positions on other markets (e.g. Bolsa de Madrid, Euronext, Deutsche Börse) can still be created and reference the instrument catalog normally, but come back as an explicit "unavailable" valuation rather than a fabricated price. This is an explicit, documented initial-scope decision, not a core-domain limitation — the business logic itself stays provider- and market-neutral, and coverage can be extended to other markets with a future adapter or provider, without changing it.
+
 ### Portfolio Home
 
 ![Home](docs/img/portfolios_home.jpg)
@@ -118,7 +126,9 @@ This separation allows the project to evolve independently from the tooling used
 │
 ├── product/
 │   ├── architecture/
+│   │   └── adrs/
 │   ├── definition/
+│   │   ├── enablers/
 │   │   ├── features/
 │   │   └── global/
 │   │       ├── vision.md
@@ -128,7 +138,8 @@ This separation allows the project to evolve independently from the tooling used
 │   │       ├── information-model.md
 │   │       └── business-events.md
 │   ├── engineering/
-│   └── governance/
+│   ├── governance/
+│   └── ux/
 │
 └── specs/
 ```
