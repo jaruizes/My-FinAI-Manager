@@ -44,13 +44,13 @@ My-FinAI-Manager is currently in the early stages of development. These are the 
 ### Portfolio Home
 
 ```
-![Home](/doc/img/portfoliios_home)
+![Home](docs/img/portfoliios_home)
 ```
 
 ### Portfolio Detail
 
 ```
-![Home](/doc/img/portfoliio_detail)
+![Home](docs/img/portfoliio_detail)
 ```
 
 ## Core Principle
