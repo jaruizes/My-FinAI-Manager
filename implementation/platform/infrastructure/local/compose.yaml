@@ -58,9 +58,15 @@ services:
       # to Finnhub as the X-Finnhub-Token header, never a URL parameter.
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
       FINNHUB_BASE_URL: ${FINNHUB_BASE_URL:-https://finnhub.io/api/v1}
+      # FD005 / EN006 research D3 — OpenAI (portfolio-analysis task only). Same pattern as Finnhub
+      # above: taken from the shell environment or infrastructure/local/.env (git-ignored). BLANK ⇒
+      # the adapter is unusable and every analysis resolves to FAILED(NOT_CONFIGURED), while every
+      # other capability keeps working. Sent to OpenAI as the Authorization: Bearer header, never a
+      # URL parameter.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       # EN006 / ADR-004 — export AI telemetry to the local OpenTelemetry Collector. No AI provider
-      # credential is ever carried by this configuration (there is none — EN006 ships no live
-      # provider, resolved Q1).
+      # credential is ever carried by this configuration.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-my-finai-manager-core}
     ports:

@@ -15,11 +15,14 @@ public interface PromptRepositoryPort {
     PromptReference findGlobalSystemPrompt();
 
     /**
-     * Task-specific instructions layered on top of the global system prompt (FR-012). Absent for a
-     * task with no dedicated instructions — still a valid, known task, distinct from an unknown one
-     * (which {@code PromptService} rejects with {@code AiConfigurationErrorException}).
+     * Task-specific instructions layered on top of the global system prompt (FR-012), carrying
+     * their <strong>own</strong> {@code promptId}/{@code promptVersion} (FD005 research D2 — a
+     * task's persisted prompt version must identify the task's own prompt, not the global one it's
+     * layered on). Absent for a task with no dedicated instructions — still a valid, known task,
+     * distinct from an unknown one (which {@code PromptService} rejects with
+     * {@code AiConfigurationErrorException}).
      */
-    Optional<String> findTaskInstructions(String taskType);
+    Optional<PromptReference> findTaskInstructions(String taskType);
 
     /** Whether {@code taskType} is a registered task at all (known tasks may still lack instructions). */
     boolean isKnownTask(String taskType);

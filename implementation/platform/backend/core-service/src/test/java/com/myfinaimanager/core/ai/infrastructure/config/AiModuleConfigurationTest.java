@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +20,8 @@ class AiModuleConfigurationTest {
                 "local-deterministic-v1",
                 new AiProperties.Limits(8000, 1000, 9000, 20000, new BigDecimal("0.50")),
                 new AiProperties.Timeout(Duration.ofSeconds(2), Duration.ofSeconds(5)),
-                new AiProperties.Retry(2, Duration.ofMillis(200)));
+                new AiProperties.Retry(2, Duration.ofMillis(200)),
+                Map.of());
 
         AiInvocationSettings settings = new AiModuleConfiguration().aiInvocationSettings(properties);
 
@@ -33,5 +35,21 @@ class AiModuleConfigurationTest {
         assertThat(settings.timeout()).isEqualTo(Duration.ofSeconds(5));
         assertThat(settings.maxRetryAttempts()).isEqualTo(2);
         assertThat(settings.retryBackoff()).isEqualTo(Duration.ofMillis(200));
+        assertThat(settings.taskProviders()).isEmpty();
+    }
+
+    @Test
+    void maps_per_task_provider_overrides_keyed_by_task_type() {
+        AiProperties properties = new AiProperties(
+                "local",
+                "local-deterministic-v1",
+                new AiProperties.Limits(8000, 1000, 9000, 20000, new BigDecimal("0.50")),
+                new AiProperties.Timeout(Duration.ofSeconds(2), Duration.ofSeconds(5)),
+                new AiProperties.Retry(2, Duration.ofMillis(200)),
+                Map.of("portfolio-analysis", new AiProperties.TaskOverride("openai")));
+
+        AiInvocationSettings settings = new AiModuleConfiguration().aiInvocationSettings(properties);
+
+        assertThat(settings.taskProviders()).containsExactly(Map.entry("portfolio-analysis", "openai"));
     }
 }

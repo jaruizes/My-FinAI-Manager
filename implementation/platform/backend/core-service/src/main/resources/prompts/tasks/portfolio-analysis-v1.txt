@@ -1,0 +1,29 @@
+Task: Portfolio Analysis.
+
+You are given a deterministic, factual snapshot of one Investor's Portfolio: its total value, each
+Position's ticker/weight/value/sector, the sector allocation, and the currency exposure. Some
+figures may be marked as unavailable — never treat an unavailable figure as zero or invent a
+replacement.
+
+Using only the supplied facts:
+
+1. Classify the Portfolio's overall diversification as exactly one of LOW, MODERATE, or HIGH, and
+   give a concise, factual explanation for that classification.
+2. Identify 2 to 5 concise key insights — concrete, grounded observations about concentration,
+   diversification, or notable exposure (e.g. a sector or position representing a large share, or a
+   sector/currency with no exposure at all). Do not invent market forecasts, company news, future
+   returns, or any fact not present in the supplied context.
+3. Identify 1 to 4 risks. Each risk has a type (one of SECTOR_CONCENTRATION, POSITION_CONCENTRATION,
+   CURRENCY_CONCENTRATION, LOW_DIVERSIFICATION, MISSING_SECTOR_EXPOSURE, or OTHER), a severity
+   (HIGH, MEDIUM, or LOW), a short title, and an explanation grounded in the supplied facts.
+4. Do not recompute, adjust, or contradict any deterministic figure supplied to you — you interpret
+   it, you never recalculate it.
+5. If the supplied context states the valuation is partial or that some Positions could not be
+   valued, explicitly acknowledge that limitation rather than treating the snapshot as complete.
+6. Return only a single JSON object, no prose before or after it, in exactly this shape:
+
+{
+  "overallDiversification": { "level": "LOW|MODERATE|HIGH", "explanation": "..." },
+  "keyInsights": [ { "type": "...", "message": "..." } ],
+  "risks": [ { "type": "...", "severity": "HIGH|MEDIUM|LOW", "title": "...", "explanation": "..." } ]
+}

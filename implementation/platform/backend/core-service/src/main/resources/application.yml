@@ -84,10 +84,13 @@ frankfurter:
   cache:
     fx-ttl: 10m
 
-# EN006 — provider-neutral AI model integration (ai module). No live AI provider is wired
-# (resolved Q1) — `default-provider: local` selects the shipped deterministic LocalAiModelAdapter,
-# which needs no key and makes no outbound call. Limits/timeout/retry are placeholder defaults
-# (research.md D-plan; spec.md A8) — safe to tune without any code change.
+# EN006 — provider-neutral AI model integration (ai module). `default-provider: local` selects the
+# shipped deterministic LocalAiModelAdapter for any task with no override below — needs no key,
+# makes no outbound call. Limits/timeout/retry are placeholder defaults (research.md D-plan; spec.md
+# A8) — safe to tune without any code change.
+# FD005 / research D1 — per-task provider routing: "portfolio-analysis" is routed to the real
+# OpenAI adapter; every other task (incl. EN006's own "diagnostic") is unaffected and keeps using
+# `default-provider`.
 ai:
   default-provider: local
   default-model: local-deterministic-v1
@@ -103,6 +106,25 @@ ai:
   retry:
     max-attempts: 2
     backoff: 200ms
+  tasks:
+    portfolio-analysis:
+      provider: openai
+
+# FD005 research D3 — the real OpenAI provider adapter (ai.infrastructure.provider.openai). The API
+# key is supplied per environment via OPENAI_API_KEY and is NEVER committed. When it is unset the
+# adapter is unusable: every call throws AiProviderNotConfiguredException with NO outbound call —
+# mirrors EN005's Finnhub blank-key behavior exactly. The key is sent as the `Authorization: Bearer`
+# request header — never a URL query parameter. Pricing is a documented placeholder (spec A1),
+# overridable without any code change.
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+  model: ${OPENAI_MODEL:gpt-4o-mini}
+  connect-timeout: 3s
+  read-timeout: 20s
+  pricing:
+    input-per1k: 0.00015
+    output-per1k: 0.0006
 
 management:
   endpoints:

@@ -34,6 +34,22 @@ services:
       retries: 20
       start_period: 3s
 
+  # FD005 — the external AI-provider boundary for E2E. A tiny dependency-free Node stub (built by
+  # e2e.sh) that serves a canned `POST /v1/chat/completions` response, plus a magic-marker failure
+  # mode for E2E-003. The REAL `OpenAiModelAdapter` / mapper / error-translation path runs against
+  # it — no live api.openai.com, no outbound Internet.
+  openai-stub:
+    image: finai/openai-stub:local
+    pull_policy: never
+    build:
+      context: ../../e2e/openai-stub
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 3s
+
   backend:
     ports: !override
       - "18080:8080"
@@ -44,8 +60,15 @@ services:
       FINNHUB_API_KEY: e2e-stub
       FINNHUB_BASE_URL: http://finnhub-stub:8080
       FRANKFURTER_BASE_URL: http://finnhub-stub:8080
+      # FD005 — same pattern: a non-secret placeholder key (the stub ignores it, but it must be
+      # non-blank so ai.tasks.portfolio-analysis.provider=openai is actually reachable) and the
+      # base URL redirected to the stub.
+      OPENAI_API_KEY: e2e-stub
+      OPENAI_BASE_URL: http://openai-stub:8080/v1
     depends_on:
       finnhub-stub:
+        condition: service_healthy
+      openai-stub:
         condition: service_healthy
 
   frontend:

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -72,13 +74,18 @@ class AiInvocationPolicyTest {
     private static AiInvocationSettings settings(TokenLimits limits, BigDecimal maxCost, int maxAttempts) {
         return new AiInvocationSettings(
                 "local", "local-deterministic-v1", limits, maxCost, Duration.ofSeconds(2), maxAttempts,
-                Duration.ofMillis(1));
+                Duration.ofMillis(1), Map.of());
     }
 
     private static AiInvocationPolicy policyWith(AiModelPort modelPort, AiInvocationSettings settings) {
+        return policyWith(Map.of(settings.defaultProvider(), modelPort), settings);
+    }
+
+    private static AiInvocationPolicy policyWith(
+            Map<String, AiModelPort> modelPortsByProvider, AiInvocationSettings settings) {
         ClasspathPromptRepository promptRepository = new ClasspathPromptRepository();
         return new AiInvocationPolicy(
-                modelPort,
+                modelPortsByProvider,
                 settings,
                 new PromptService(promptRepository),
                 new ContextBudgetService(),
@@ -146,7 +153,7 @@ class AiInvocationPolicyTest {
         AiModelPort modelPort = mock(AiModelPort.class);
         AiInvocationPolicy policy = policyWith(modelPort, settings(GENEROUS_LIMITS, BigDecimal.TEN, 2));
         AiRequest unknownTask =
-                AiRequest.of("portfolio-analysis", "hi", "", Optional.empty(), 32, "corr-1");
+                AiRequest.of("totally-unregistered-task", "hi", "", Optional.empty(), 32, "corr-1");
 
         assertThatThrownBy(() -> policy.generate(unknownTask)).isInstanceOf(AiConfigurationErrorException.class);
         verifyNoInteractions(modelPort);
@@ -249,7 +256,8 @@ class AiInvocationPolicyTest {
             throw new IllegalStateException("should have timed out first");
         });
         AiInvocationSettings shortTimeout = new AiInvocationSettings(
-                "local", "m", GENEROUS_LIMITS, BigDecimal.TEN, Duration.ofMillis(50), 3, Duration.ofMillis(1));
+                "local", "m", GENEROUS_LIMITS, BigDecimal.TEN, Duration.ofMillis(50), 3, Duration.ofMillis(1),
+                Map.of());
         AiInvocationPolicy policy = policyWith(slow, shortTimeout);
 
         assertThatThrownBy(() -> policy.generate(diagnosticRequest())).isInstanceOf(AiTimeoutException.class);
@@ -289,5 +297,65 @@ class AiInvocationPolicyTest {
 
         assertThat(caller.isAlive()).isFalse();
         assertThat(captured.get()).isInstanceOf(AiProviderUnavailableException.class);
+    }
+
+    // ---- Per-task provider routing (FD005 research D1) -------------------------------------
+
+    @Test
+    void a_task_with_a_provider_override_is_routed_to_that_providers_model_port_not_the_default() {
+        AiModelPort defaultPort = mock(AiModelPort.class);
+        AiModelPort openaiPort = mock(AiModelPort.class);
+        AiUsage usage = new AiUsage(1, 1, 2, "openai", "gpt-x", BigDecimal.ZERO);
+        AiResponse response = new AiResponse(
+                "Diversification looks moderate.", Optional.empty(), "openai", "gpt-x", usage, 1,
+                Optional.of("stop"), "req-1", Instant.now());
+        when(openaiPort.generate(any())).thenReturn(response);
+        AiInvocationSettings settings = new AiInvocationSettings(
+                "local", "local-deterministic-v1", GENEROUS_LIMITS, BigDecimal.TEN, Duration.ofSeconds(2), 2,
+                Duration.ofMillis(1), Map.of("portfolio-analysis", "openai"));
+        AiInvocationPolicy policy = policyWith(Map.of("local", defaultPort, "openai", openaiPort), settings);
+        AiRequest request =
+                AiRequest.of("portfolio-analysis", "Assess this portfolio.", "", Optional.empty(), 64, "corr-1");
+
+        AiResponse result = policy.generate(request);
+
+        assertThat(result.provider()).isEqualTo("openai");
+        verify(openaiPort).generate(any());
+        verifyNoInteractions(defaultPort);
+    }
+
+    @Test
+    void a_task_routed_to_an_unregistered_provider_raises_a_configuration_error() {
+        AiModelPort defaultPort = mock(AiModelPort.class);
+        AiInvocationSettings settings = new AiInvocationSettings(
+                "local", "local-deterministic-v1", GENEROUS_LIMITS, BigDecimal.TEN, Duration.ofSeconds(2), 2,
+                Duration.ofMillis(1), Map.of("portfolio-analysis", "openai"));
+        AiInvocationPolicy policy = policyWith(Map.of("local", defaultPort), settings);
+        AiRequest request =
+                AiRequest.of("portfolio-analysis", "Assess this portfolio.", "", Optional.empty(), 64, "corr-1");
+
+        assertThatThrownBy(() -> policy.generate(request))
+                .isInstanceOf(AiConfigurationErrorException.class)
+                .hasMessageContaining("openai");
+        verifyNoInteractions(defaultPort);
+    }
+
+    @Test
+    void a_task_with_no_provider_override_still_resolves_to_the_default_providers_model_port() {
+        AiModelPort defaultPort = mock(AiModelPort.class);
+        AiModelPort openaiPort = mock(AiModelPort.class);
+        AiUsage usage = new AiUsage(1, 1, 2, "local", "local-deterministic-v1", BigDecimal.ZERO);
+        AiResponse response = new AiResponse(
+                "All good.", Optional.empty(), "local", "local-deterministic-v1", usage, 1, Optional.of("stop"),
+                "req-1", Instant.now());
+        when(defaultPort.generate(any())).thenReturn(response);
+        AiInvocationPolicy policy =
+                policyWith(Map.of("local", defaultPort, "openai", openaiPort), settings(GENEROUS_LIMITS, BigDecimal.TEN, 2));
+
+        AiResponse result = policy.generate(diagnosticRequest());
+
+        assertThat(result.provider()).isEqualTo("local");
+        verify(defaultPort).generate(any());
+        verifyNoInteractions(openaiPort);
     }
 }

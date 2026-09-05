@@ -46,13 +46,27 @@ class PromptServiceTest {
 
     @Test
     void layers_task_instructions_under_the_global_prompt() {
+        PromptReference taskInstructions = new PromptReference("analysis-task", "v3", "Focus on risk.");
         when(promptRepository.isKnownTask("analysis")).thenReturn(true);
         when(promptRepository.findGlobalSystemPrompt()).thenReturn(GLOBAL);
-        when(promptRepository.findTaskInstructions("analysis")).thenReturn(Optional.of("Focus on risk."));
+        when(promptRepository.findTaskInstructions("analysis")).thenReturn(Optional.of(taskInstructions));
 
         PromptReference composed = promptService.compose("analysis");
 
         assertThat(composed.body()).isEqualTo("Be careful.\n\nFocus on risk.");
+    }
+
+    @Test
+    void a_task_specific_prompt_carries_its_own_promptId_and_version_not_the_global_ones() {
+        PromptReference taskInstructions = new PromptReference("portfolio-analysis", "v1", "Assess diversification.");
+        when(promptRepository.isKnownTask("portfolio-analysis")).thenReturn(true);
+        when(promptRepository.findGlobalSystemPrompt()).thenReturn(GLOBAL);
+        when(promptRepository.findTaskInstructions("portfolio-analysis")).thenReturn(Optional.of(taskInstructions));
+
+        PromptReference composed = promptService.compose("portfolio-analysis");
+
+        assertThat(composed.promptId()).isEqualTo("portfolio-analysis");
+        assertThat(composed.promptVersion()).isEqualTo("v1");
     }
 
     @Test

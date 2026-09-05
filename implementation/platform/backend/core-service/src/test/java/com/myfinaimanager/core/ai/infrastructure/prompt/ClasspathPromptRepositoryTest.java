@@ -30,6 +30,17 @@ class ClasspathPromptRepositoryTest {
 
     @Test
     void an_unregistered_task_is_not_known() {
-        assertThat(repository.isKnownTask("portfolio-analysis")).isFalse();
+        assertThat(repository.isKnownTask("unregistered-task")).isFalse();
+    }
+
+    @Test
+    void portfolio_analysis_is_a_known_task_with_its_own_versioned_instructions() {
+        assertThat(repository.isKnownTask("portfolio-analysis")).isTrue();
+        Optional<PromptReference> instructions = repository.findTaskInstructions("portfolio-analysis");
+
+        assertThat(instructions).isPresent();
+        assertThat(instructions.get().promptId()).isEqualTo("portfolio-analysis");
+        assertThat(instructions.get().promptVersion()).isEqualTo("v1");
+        assertThat(instructions.get().body()).contains("diversification");
     }
 }

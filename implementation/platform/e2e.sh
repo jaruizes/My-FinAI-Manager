@@ -34,10 +34,12 @@ E2E_CTX="${PLATFORM_DIR}/e2e"
 BACKEND_CTX="${PLATFORM_DIR}/backend/core-service"
 FRONTEND_CTX="${PLATFORM_DIR}/frontend/web"
 FINNHUB_STUB_CTX="${PLATFORM_DIR}/e2e/finnhub-stub"
+OPENAI_STUB_CTX="${PLATFORM_DIR}/e2e/openai-stub"
 E2E_IMAGE="finai/e2e:local"
 BACKEND_IMAGE="finai/core-service:local"
 FRONTEND_IMAGE="finai/web:local"
 FINNHUB_STUB_IMAGE="finai/finnhub-stub:local"
+OPENAI_STUB_IMAGE="finai/openai-stub:local"
 
 PROJECT="finai-e2e"
 READY_TIMEOUT="${E2E_READY_TIMEOUT:-180}"
@@ -80,6 +82,7 @@ build_image() {
 build_image "${BACKEND_IMAGE}"      "${BACKEND_CTX}"      "backend"
 build_image "${FRONTEND_IMAGE}"     "${FRONTEND_CTX}"     "frontend"
 build_image "${FINNHUB_STUB_IMAGE}" "${FINNHUB_STUB_CTX}" "finnhub-stub (FD004 E2E)"
+build_image "${OPENAI_STUB_IMAGE}"  "${OPENAI_STUB_CTX}"  "openai-stub (FD005 E2E)"
 build_image "${E2E_IMAGE}"          "${E2E_CTX}"          "e2e (Playwright)"
 
 # Make sure the base image(s) we do NOT build are the HOST-architecture variant. A wrong-arch
@@ -103,21 +106,22 @@ pull_native "${PG_IMAGE}"
 # --- start the isolated platform (not the e2e service yet) --------------
 
 info "starting the isolated platform (project '${PROJECT}') ..."
-"${DC[@]}" up -d --no-build postgres finnhub-stub backend frontend
+"${DC[@]}" up -d --no-build postgres finnhub-stub openai-stub backend frontend
 
-info "waiting for postgres + finnhub-stub + backend + frontend to become healthy (timeout ${READY_TIMEOUT}s) ..."
+info "waiting for postgres + finnhub-stub + openai-stub + backend + frontend to become healthy (timeout ${READY_TIMEOUT}s) ..."
 deadline=$(( $(date +%s) + READY_TIMEOUT ))
 while :; do
   status="$("${DC[@]}" ps --format '{{.Service}}={{.Health}}' 2>/dev/null | sort | tr '\n' ' ')"
   if echo "${status}" | grep -q 'postgres=healthy' \
      && echo "${status}" | grep -q 'finnhub-stub=healthy' \
+     && echo "${status}" | grep -q 'openai-stub=healthy' \
      && echo "${status}" | grep -q 'backend=healthy' \
      && echo "${status}" | grep -q 'frontend=healthy'; then
     break
   fi
   if echo "${status}" | grep -q 'unhealthy' || (( $(date +%s) >= deadline )); then
     echo; "${DC[@]}" ps || true
-    "${DC[@]}" logs --tail 40 postgres finnhub-stub backend frontend || true
+    "${DC[@]}" logs --tail 40 postgres finnhub-stub openai-stub backend frontend || true
     die "isolated platform did not become healthy (status: ${status:-<none>})."
   fi
   sleep 3
@@ -134,7 +138,7 @@ set -e
 if [[ ${EXIT} -ne 0 ]]; then
   info "Playwright failed (exit ${EXIT}); capturing container logs for diagnosis ..."
   mkdir -p "${RESULTS_DIR}/containers"
-  for svc in postgres backend frontend; do
+  for svc in postgres finnhub-stub openai-stub backend frontend; do
     "${DC[@]}" logs --no-color "${svc}" > "${RESULTS_DIR}/containers/${svc}.log" 2>&1 || true
   done
   info "container logs: ${RESULTS_DIR}/containers/  |  Playwright artifacts: ${RESULTS_DIR}/"

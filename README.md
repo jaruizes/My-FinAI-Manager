@@ -37,6 +37,22 @@ The long-term goal is not to build an *AI stock picker*, but a system capable of
 
 > Why did my portfolio move?
 
+## Current Capabilities
+
+My-FinAI-Manager is currently in the early stages of development. These are the main capabilities it currently supports:
+
+### Portfolio Home
+
+```
+![Home](/doc/img/portfoliios_home)
+```
+
+### Portfolio Detail
+
+```
+![Home](/doc/img/portfoliio_detail)
+```
+
 ## Core Principle
 
 Financial calculations and deterministic business rules must remain deterministic.
@@ -182,7 +198,6 @@ Defines how human intent, AI agents, architecture, and the Spec-Driven Developme
 These artifacts may include specifications, clarification records, implementation plans, tasks, and checklists.
 
 They are derived from the human-governed definition under `product/` and must remain traceable to the corresponding Feature Definition.
-
 
 ## Architecture Evolution
 

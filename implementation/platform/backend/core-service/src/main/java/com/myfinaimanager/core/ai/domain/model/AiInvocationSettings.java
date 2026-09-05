@@ -2,6 +2,7 @@ package com.myfinaimanager.core.ai.domain.model;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * Domain-safe view of {@code ai.*} configuration (research D-plan OD-3). {@code ai.infrastructure
@@ -16,6 +17,8 @@ import java.time.Duration;
  * @param timeout           the bounded timeout around one {@code AiModelPort.generate(...)} call
  * @param maxRetryAttempts  maximum attempts (including the first) for a transient failure (&ge;1)
  * @param retryBackoff      delay between retry attempts
+ * @param taskProviders     per-task provider id overrides (FD005 research D1), keyed by task type;
+ *                          a task absent from this map resolves to {@code defaultProvider}
  */
 public record AiInvocationSettings(
         String defaultProvider,
@@ -24,7 +27,8 @@ public record AiInvocationSettings(
         BigDecimal maxEstimatedCost,
         Duration timeout,
         int maxRetryAttempts,
-        Duration retryBackoff) {
+        Duration retryBackoff,
+        Map<String, String> taskProviders) {
 
     public AiInvocationSettings {
         if (defaultProvider == null || defaultProvider.isBlank()) {
@@ -48,6 +52,7 @@ public record AiInvocationSettings(
         if (retryBackoff == null || retryBackoff.isNegative()) {
             throw new IllegalArgumentException("retryBackoff must not be negative");
         }
+        taskProviders = taskProviders == null ? Map.of() : Map.copyOf(taskProviders);
     }
 
     /**

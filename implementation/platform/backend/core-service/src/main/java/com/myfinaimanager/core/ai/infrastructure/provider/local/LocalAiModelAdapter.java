@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.myfinaimanager.core.ai.domain.model.AiRequest;
@@ -19,12 +18,15 @@ import com.myfinaimanager.core.ai.domain.model.OutputSchema.FieldSpec;
 import com.myfinaimanager.core.ai.domain.ports.AiModelPort;
 
 /**
- * The one concrete {@link AiModelPort} implementation EN006 ships (resolved Q1; contract
- * {@code local-ai-adapter.md}). No network call, no credential, deterministic content for a given
- * request — proves the port is implementable and drives the observability chain end to end.
+ * The deterministic local/stub {@link AiModelPort} implementation EN006 ships (resolved Q1;
+ * contract {@code local-ai-adapter.md}). No network call, no credential, deterministic content for
+ * a given request — proves the port is implementable and drives the observability chain end to
+ * end. Registered as the named bean {@code "local"} — always present, selected via
+ * {@code ai.default-provider} / {@code ai.tasks.<task>.provider} (FD005 research D1; per-task
+ * routing means a real provider adapter, e.g. {@code "openai"}, can coexist and be selected for a
+ * different task without disturbing this one).
  */
-@Component
-@ConditionalOnProperty(name = "ai.default-provider", havingValue = "local", matchIfMissing = true)
+@Component("local")
 public class LocalAiModelAdapter implements AiModelPort {
 
     public static final String PROVIDER = "local";

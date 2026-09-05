@@ -55,6 +55,19 @@ FINNHUB_API_KEY=xxxxxxxx ./start.sh
 to the backend container. Never put the key in `.env.example` or commit it — it is sent to Finnhub
 only as the `X-Finnhub-Token` header and is never logged.
 
+**Optional — real AI analysis for FD005.** Portfolio Analysis needs OpenAI. With no key the
+platform runs fine but every analysis resolves to `FAILED` (`NOT_CONFIGURED`). To use a live
+provider, set a **real** key as an environment variable — in the git-ignored
+`infrastructure/local/.env` (`OPENAI_API_KEY=...`) or exported before the script:
+
+```bash
+OPENAI_API_KEY=xxxxxxxx ./start.sh
+```
+
+`compose.yaml` forwards `OPENAI_API_KEY` (and the optional `OPENAI_BASE_URL`/`OPENAI_MODEL`) the
+same way. Never put the key in `.env.example` or commit it — it is sent to OpenAI only as the
+`Authorization: Bearer` header and is never logged.
+
 `start.sh` / `stop.sh` / `e2e.sh` are the **canonical** entry points. Their internals may change;
 the interface must not. The frontend container (nginx) serves the Angular build and reverse-proxies
 `/api/*` to the backend container — the browser only ever talks to the frontend origin.
@@ -92,6 +105,7 @@ deliberately small and journey-focused (`product/engineering/testing-strategy.md
 | Select Financial Instrument from catalog (Add Position) | frontend `/portfolios/new` Add Position — search + select · `GET /api/financial-instruments?query=` | `specs/FD002-select-financial-instrument-from-catalog/quickstart.md` |
 | List and view portfolio details | frontend **Home (`/`)** lists saved portfolios; a row opens `/portfolios/:id` · `GET /api/portfolios` · `GET /api/portfolios/{portfolioId}` | `specs/FD003-list-and-view-portfolio-details/quickstart.md` |
 | Portfolio valuation & allocation | automatic on create; shown in `/portfolios/:id` · `GET /api/portfolios/{portfolioId}/valuation` | `specs/FD004-portfolio-valuation-and-allocation/quickstart.md` |
+| AI Portfolio Analysis | automatic on create (background) + "Run analysis again"; shown in `/portfolios/:id` · `GET /api/portfolios/{portfolioId}/analysis/latest` · `POST /api/portfolios/{portfolioId}/analysis` | `specs/FD005-ai-portfolio-analysis/quickstart.md` |
 | Search the Financial Instrument catalog | `GET /api/financial-instruments?query=` | `specs/EN004-establish-financial-instrument-reference-data/quickstart.md` |
 
 The external REST contract is `contracts/openapi/openapi.yaml` (OpenAPI 3.0.3). Portfolio data
@@ -132,6 +146,24 @@ allocation). The sector percentages are read straight off the *Allocation by Sec
 positive EUR basis; otherwise the valuation-state line stands alone. FD003's `Portfolio` contract
 and the `PortfolioValuation` response are unchanged.
 
+**FD005** generates an **AI-assisted analysis** of each Portfolio — an overall diversification
+assessment (level + explanation), 2–5 grounded key insights, and 1–4 classified risks — computed
+from the FD004 deterministic valuation, never recalculated by the model. A background analysis is
+requested automatically right after Portfolio creation (Spring `@Async`, a dedicated
+`ThreadPoolTaskExecutor` — never blocks the create response) and the Investor may request a new one
+at any time ("Run analysis again"); at most one request may be `PENDING`/`RUNNING` per Portfolio at
+a time (enforced by a PostgreSQL partial unique index, not just the UI). Every request creates a new
+immutable record — previous analyses are preserved, never mutated (Flyway
+`V5__portfolio_analysis.sql` — `portfolio_analysis` / `portfolio_analysis_insight` /
+`portfolio_analysis_risk`, owned by the new `portfolioanalysis` module) — and only the latest is
+ever shown, read through `GET /api/portfolios/{portfolioId}/analysis/latest` (status `NONE` /
+`PENDING` / `RUNNING` / `COMPLETED` / `FAILED`; content fields present only when `COMPLETED`). The
+`/portfolios/:id` detail polls while open and shows an explicit in-progress state, the completed
+content, or a controlled failed state with a working retry — never a stale result and never a
+provider payload/stack trace. `portfolioanalysis` reads `portfolio` and `ai` each through exactly
+one dedicated ACL adapter (AR-062, ArchUnit-enforced) — no FD004/EN006 type crosses into its own
+domain/business code.
+
 ### Provider integrations
 
 **EN005** established a **backend-only** Finnhub market-data integration (`marketdata` module in
@@ -149,15 +181,16 @@ Finnhub stub). Automated tests never call the live provider.
 `core-service`): a generic `AiModelPort` behind an invocation policy that centralizes prompt
 composition/versioning, rule-based input/output guardrails, token/context/cost budget enforcement,
 provider-neutral error handling with bounded timeout/retry, and OpenTelemetry-based observability.
-EN006 ships **no live AI provider** — only a deterministic, network-free local/stub adapter, so it
-needs no API key and defines no business AI feature; a real provider (Anthropic/OpenAI/Bedrock/
-Vertex) is deferred to whichever future feature first needs one. Every AI invocation is traced and
-metriced through a local Docker Compose observability stack (`ADR-004`) — an OpenTelemetry
-Collector, Jaeger, Prometheus, and an auto-provisioned Grafana dashboard, all started/stopped by
-`./start.sh` / `./stop.sh` alongside the rest of the platform. The internal
-`POST /actuator/aidiagnostic` endpoint (not a business API, not in `openapi.yaml`) triggers one
-deterministic invocation so the whole chain can be inspected end to end. No product/portfolio
-behavior is affected; EN006 is purely additive infrastructure for future AI-assisted features.
+EN006 ships a deterministic, network-free **local/stub adapter** (`@Component("local")`, needs no
+key — still the default for every task) and, since FD005, a real **OpenAI adapter**
+(`@Component("openai")`) selected **per task** via `ai.tasks.<task>.provider` — FD005's
+`portfolio-analysis` task routes to it; EN006's own internal `diagnostic` task is unaffected and
+still uses the local adapter. Every AI invocation is traced and metriced through a local Docker
+Compose observability stack (`ADR-004`) — an OpenTelemetry Collector, Jaeger, Prometheus, and an
+auto-provisioned Grafana dashboard, all started/stopped by `./start.sh` / `./stop.sh` alongside the
+rest of the platform. The internal `POST /actuator/aidiagnostic` endpoint (not a business API, not
+in `openapi.yaml`) triggers one deterministic invocation (always against the local adapter) so the
+whole chain can be inspected end to end.
 
 The Financial Instrument catalog (`market` / `financial_instrument` tables — Flyway
 `V3__financial_instrument.sql`) is populated on backend start from committed reference data under

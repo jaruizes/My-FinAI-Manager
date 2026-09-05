@@ -25,8 +25,10 @@ public class PromptService {
 
     /**
      * @param taskType the request's task
-     * @return the composed system-prompt layer, identified by the global prompt's id/version
-     *     (FR-013, FR-014)
+     * @return the composed system-prompt layer. When the task has its own dedicated instructions,
+     *     the result is identified by <strong>that task's own</strong> {@code promptId}/
+     *     {@code promptVersion} (FD005 research D2) — otherwise by the global prompt's (FR-013,
+     *     FR-014).
      * @throws AiConfigurationErrorException when {@code taskType} is not a registered task
      */
     public PromptReference compose(String taskType) {
@@ -34,10 +36,9 @@ public class PromptService {
             throw new AiConfigurationErrorException("unknown task type '" + taskType + "'");
         }
         PromptReference global = promptRepository.findGlobalSystemPrompt();
-        Optional<String> taskInstructions = promptRepository.findTaskInstructions(taskType);
-        String body = taskInstructions
-                .map(instructions -> global.body() + "\n\n" + instructions)
-                .orElse(global.body());
-        return new PromptReference(global.promptId(), global.promptVersion(), body);
+        Optional<PromptReference> task = promptRepository.findTaskInstructions(taskType);
+        return task
+                .map(t -> new PromptReference(t.promptId(), t.promptVersion(), global.body() + "\n\n" + t.body()))
+                .orElse(global);
     }
 }

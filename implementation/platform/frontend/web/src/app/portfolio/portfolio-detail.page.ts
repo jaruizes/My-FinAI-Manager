@@ -1,7 +1,12 @@
 import { NgFor, NgIf } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { interval } from 'rxjs';
+import { switchMap, takeWhile } from 'rxjs/operators';
 import { PieChartComponent } from './pie-chart.component';
+import { PortfolioAnalysisView } from './portfolio-analysis.models';
+import { PortfolioAnalysisService } from './portfolio-analysis.service';
 import { PortfolioQueryService } from './portfolio-query.service';
 import { PortfolioValuationService } from './portfolio-valuation.service';
 import {
@@ -13,6 +18,16 @@ import {
 import { decimal2, money, percent } from './valuation-format';
 
 type ValuationState = 'loading' | 'unavailable' | PortfolioValuationView;
+type AnalysisState = 'loading' | 'unavailable' | PortfolioAnalysisView;
+
+/** US3 spec A4 — poll every 2s; after 30 polls (60s) with no terminal state, stop and hint. */
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLLS = 30;
+
+function isOpenAnalysis(result: PortfolioAnalysisView | 'not-found' | null): boolean {
+  return result !== null && result !== 'not-found' &&
+    (result.status === 'PENDING' || result.status === 'RUNNING');
+}
 
 /**
  * A single portfolio's detail view (FD003 US3 + FD004 US5): the portfolio name, a read-only table
@@ -67,6 +82,44 @@ type ValuationState = 'loading' | 'unavailable' | PortfolioValuationView;
           <app-pie-chart [slices]="tickerSlices()" title="Allocation by Ticker"></app-pie-chart>
           <app-pie-chart [slices]="sectorSlices()" title="Allocation by Sector"></app-pie-chart>
         </div>
+
+        <section class="analysis" aria-labelledby="analysis-heading">
+          <h2 id="analysis-heading" class="analysis__title">AI Portfolio Analysis</h2>
+
+          <ng-container *ngIf="showCompletedAnalysis(); else analysisStateBlock">
+            <p class="analysis__diversification">
+              <strong>{{ analysisDiversificationLevel() }} diversification</strong> —
+              {{ analysisDiversificationExplanation() }}
+            </p>
+            <ul class="analysis__insights">
+              <li *ngFor="let insight of analysisInsights()">{{ insight.message }}</li>
+            </ul>
+            <ul class="analysis__risks">
+              <li *ngFor="let risk of analysisRisks()" class="analysis__risk">
+                <span class="analysis__risk-severity" [attr.data-severity]="risk.severity">{{
+                  risk.severity
+                }}</span>
+                <strong>{{ risk.title }}</strong> — {{ risk.explanation }}
+              </li>
+            </ul>
+            <p class="analysis__timestamp">Analysed {{ formatWhen(currentAnalysis()?.completedAt ?? null) }}</p>
+          </ng-container>
+          <ng-template #analysisStateBlock>
+            <p class="analysis__state" role="status">{{ analysisStateText() }}</p>
+            <p class="analysis__state analysis__state--cap" *ngIf="pollCapReached()">
+              This is taking longer than expected — check back soon.
+            </p>
+          </ng-template>
+
+          <button
+            type="button"
+            class="link analysis__rerun"
+            *ngIf="canRequestNewAnalysis()"
+            (click)="requestNewAnalysis()"
+          >
+            Run analysis again
+          </button>
+        </section>
 
         <table class="list">
           <thead>
@@ -183,6 +236,48 @@ type ValuationState = 'loading' | 'unavailable' | PortfolioValuationView;
         gap: var(--spacing-md);
         margin-bottom: var(--spacing-lg);
       }
+      .analysis {
+        margin-bottom: var(--spacing-lg);
+      }
+      .analysis__title {
+        font-size: var(--font-size-section-title, 1.25rem);
+        margin: 0 0 var(--spacing-sm);
+      }
+      .analysis__state {
+        color: var(--color-text-secondary);
+        font-size: var(--font-size-body);
+      }
+      .analysis__diversification {
+        color: var(--color-text-primary);
+        font-size: var(--font-size-body);
+      }
+      .analysis__insights,
+      .analysis__risks {
+        margin: var(--spacing-sm) 0;
+        padding-left: var(--spacing-lg);
+      }
+      .analysis__risk {
+        margin-bottom: var(--spacing-xs);
+      }
+      .analysis__risk-severity {
+        display: inline-block;
+        font-weight: var(--font-weight-medium);
+        margin-right: var(--spacing-xs);
+      }
+      .analysis__risk-severity[data-severity='HIGH'] {
+        color: var(--color-danger, #b91c1c);
+      }
+      .analysis__risk-severity[data-severity='MEDIUM'] {
+        color: var(--color-warning);
+      }
+      .analysis__timestamp {
+        color: var(--color-text-secondary);
+        font-size: var(--font-size-caption, 0.85rem);
+      }
+      .analysis__rerun {
+        margin-top: var(--spacing-sm);
+        padding-left: 0;
+      }
       .link {
         background: none;
         border: none;
@@ -202,10 +297,19 @@ export class PortfolioDetailPageComponent implements OnInit {
   private readonly valuation_ = signal<ValuationState>('loading');
   readonly valuation = this.valuation_.asReadonly();
 
+  private readonly analysis_ = signal<AnalysisState>('loading');
+  readonly analysis = this.analysis_.asReadonly();
+
+  private readonly pollCapReached_ = signal(false);
+  readonly pollCapReached = this.pollCapReached_.asReadonly();
+
+  private readonly destroyRef = inject(DestroyRef);
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly api: PortfolioQueryService,
     private readonly valuationApi: PortfolioValuationService,
+    private readonly analysisApi: PortfolioAnalysisService,
   ) {}
 
   ngOnInit(): void {
@@ -216,6 +320,7 @@ export class PortfolioDetailPageComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id') ?? '';
     this.state_.set({ kind: 'loading' });
     this.valuation_.set('loading');
+    this.analysis_.set('loading');
     this.api.getById(id).subscribe((result) => {
       if (result === 'not-found') {
         this.state_.set({ kind: 'not-found' });
@@ -224,6 +329,7 @@ export class PortfolioDetailPageComponent implements OnInit {
       } else {
         this.state_.set({ kind: 'loaded', portfolio: result });
         this.loadValuation(id);
+        this.loadAnalysis(id);
       }
     });
   }
@@ -234,6 +340,45 @@ export class PortfolioDetailPageComponent implements OnInit {
         result === null || result === 'not-found' ? 'unavailable' : result,
       );
     });
+  }
+
+  private loadAnalysis(id: string): void {
+    this.pollCapReached_.set(false);
+    this.analysisApi.getLatest(id).subscribe((result) => {
+      this.applyAnalysisResult(result);
+      if (isOpenAnalysis(result)) {
+        this.pollAnalysis(id);
+      }
+    });
+  }
+
+  /**
+   * US3 (research D9): re-checks every 2s while the analysis is still open, stopping the moment
+   * status is COMPLETED/FAILED/NONE, on component destroy, or after a soft cap of polls (spec A4)
+   * — the cap shows a "taking longer than expected" hint but keeps the last known (still-open)
+   * state, never an error.
+   */
+  private pollAnalysis(id: string): void {
+    let pollCount = 0;
+    interval(POLL_INTERVAL_MS)
+      .pipe(
+        switchMap(() => this.analysisApi.getLatest(id)),
+        takeWhile((result) => {
+          pollCount++;
+          return pollCount < MAX_POLLS && isOpenAnalysis(result);
+        }, true),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((result) => {
+        this.applyAnalysisResult(result);
+        if (pollCount >= MAX_POLLS && isOpenAnalysis(result)) {
+          this.pollCapReached_.set(true);
+        }
+      });
+  }
+
+  private applyAnalysisResult(result: PortfolioAnalysisView | 'not-found' | null): void {
+    this.analysis_.set(result === null || result === 'not-found' ? 'unavailable' : result);
   }
 
   /** The loaded portfolio, or `null` in any non-loaded state. */
@@ -362,11 +507,89 @@ export class PortfolioDetailPageComponent implements OnInit {
     return this.matching(ticker, market)?.sector ?? '—';
   }
 
-  private formatWhen(iso: string | null): string {
+  formatWhen(iso: string | null): string {
     if (!iso) {
       return 'an unknown time';
     }
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  }
+
+  /* ---- FD005 — AI Portfolio Analysis ---- */
+
+  currentAnalysis(): PortfolioAnalysisView | null {
+    const a = this.analysis();
+    return a === 'loading' || a === 'unavailable' ? null : a;
+  }
+
+  showCompletedAnalysis(): boolean {
+    return this.currentAnalysis()?.status === 'COMPLETED';
+  }
+
+  analysisDiversificationLevel(): string {
+    const level = this.currentAnalysis()?.overallDiversification?.level;
+    return level ? level.charAt(0) + level.slice(1).toLowerCase() : '';
+  }
+
+  analysisDiversificationExplanation(): string {
+    return this.currentAnalysis()?.overallDiversification?.explanation ?? '';
+  }
+
+  analysisInsights() {
+    return this.currentAnalysis()?.keyInsights ?? [];
+  }
+
+  analysisRisks() {
+    return this.currentAnalysis()?.risks ?? [];
+  }
+
+  canRequestNewAnalysis(): boolean {
+    const a = this.analysis();
+    if (a === 'loading' || a === 'unavailable') {
+      return false;
+    }
+    return a.status === 'NONE' || a.status === 'COMPLETED' || a.status === 'FAILED';
+  }
+
+  /** US4 — "Run analysis again". Optimistically shows PENDING and resumes polling on success. */
+  requestNewAnalysis(): void {
+    const id = this.route.snapshot.paramMap.get('id') ?? '';
+    this.analysisApi.requestNew(id).subscribe((result) => {
+      if (result === null || result === 'not-found' || result === 'conflict') {
+        return; // defensive — the button is hidden while an analysis is already in progress
+      }
+      this.pollCapReached_.set(false);
+      this.applyAnalysisResult({
+        status: 'PENDING',
+        requestedAt: result.requestedAt,
+        completedAt: null,
+        overallDiversification: null,
+        keyInsights: null,
+        risks: null,
+      });
+      this.pollAnalysis(id);
+    });
+  }
+
+  analysisStateText(): string {
+    const a = this.analysis();
+    if (a === 'loading') {
+      return 'Loading analysis…';
+    }
+    if (a === 'unavailable') {
+      return 'Analysis unavailable';
+    }
+    switch (a.status) {
+      case 'NONE':
+        return 'No analysis has been requested yet';
+      case 'PENDING':
+      case 'RUNNING':
+        return 'Analysis in progress…';
+      case 'FAILED':
+        return 'We could not complete this analysis. You can run it again.';
+      case 'COMPLETED':
+      default:
+        return '';
+    }
   }
 }

@@ -11,6 +11,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.springframework.stereotype.Service;
 
+import com.myfinaimanager.core.ai.domain.exceptions.AiConfigurationErrorException;
 import com.myfinaimanager.core.ai.domain.exceptions.AiCostBudgetExceededException;
 import com.myfinaimanager.core.ai.domain.exceptions.AiException;
 import com.myfinaimanager.core.ai.domain.exceptions.AiGuardrailRejectedException;
@@ -41,9 +42,16 @@ import com.myfinaimanager.core.ai.domain.ports.TokenCounterPort;
  * guardrails, structured-output validation, and telemetry — in that exact order, every time.
  * Business features must not reimplement any of this independently.
  *
- * <p>No pricing table exists because EN006 ships no live provider (resolved Q1) — the pre-invocation
- * cost estimate below is a deliberately simple, documented placeholder (spec.md Assumption A6),
- * sufficient to prove the cost-budget-enforcement mechanism (FR-031) without claiming real pricing.
+ * <p>No pricing table exists because EN006's own shipped adapter (local) is a stub (resolved Q1) —
+ * the pre-invocation cost estimate below is a deliberately simple, documented placeholder (spec.md
+ * Assumption A6), sufficient to prove the cost-budget-enforcement mechanism (FR-031) without
+ * claiming real pricing for every possible provider.
+ *
+ * <p>Provider resolution is per-task (FD005 research D1): {@code settings.taskProviders()} is
+ * checked first for {@code taskType}, falling back to {@code settings.defaultProvider()} — this is
+ * how EN006's own {@code "diagnostic"} task keeps using the local/stub adapter while a real feature
+ * (e.g. FD005's {@code "portfolio-analysis"}) is routed to a different, named {@code AiModelPort}
+ * bean, with zero change to this orchestration logic.
  */
 @Service
 public class AiInvocationPolicy implements GenerateAiUseCase {
@@ -51,7 +59,7 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
     /** Placeholder pricing (spec.md A6) — replaced once a real provider adapter exists. */
     private static final BigDecimal NOMINAL_COST_PER_TOKEN = new BigDecimal("0.00001");
 
-    private final AiModelPort modelPort;
+    private final Map<String, AiModelPort> modelPortsByProvider;
     private final AiInvocationSettings settings;
     private final PromptService promptService;
     private final ContextBudgetService contextBudgetService;
@@ -61,7 +69,7 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
     private final TelemetryPort telemetry;
 
     public AiInvocationPolicy(
-            AiModelPort modelPort,
+            Map<String, AiModelPort> modelPortsByProvider,
             AiInvocationSettings settings,
             PromptService promptService,
             ContextBudgetService contextBudgetService,
@@ -69,7 +77,7 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
             InputGuardrailPort inputGuardrail,
             OutputGuardrailPort outputGuardrail,
             TelemetryPort telemetry) {
-        this.modelPort = modelPort;
+        this.modelPortsByProvider = modelPortsByProvider;
         this.settings = settings;
         this.promptService = promptService;
         this.contextBudgetService = contextBudgetService;
@@ -79,15 +87,30 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
         this.telemetry = telemetry;
     }
 
+    private String resolveProviderId(String taskType) {
+        return settings.taskProviders().getOrDefault(taskType, settings.defaultProvider());
+    }
+
+    private AiModelPort resolveModelPort(String taskType, String providerId) {
+        AiModelPort modelPort = modelPortsByProvider.get(providerId);
+        if (modelPort == null) {
+            throw new AiConfigurationErrorException(
+                    "no AiModelPort registered for provider '" + providerId + "' (task '" + taskType + "')");
+        }
+        return modelPort;
+    }
+
     @Override
     public AiResponse generate(AiRequest callerRequest) {
         String taskType = callerRequest.taskType();
+        String providerId = resolveProviderId(taskType);
         String invocationId = UUID.randomUUID().toString();
         long usecaseStart = System.nanoTime();
         PromptReference composedPrompt = null;
 
         try (TelemetryScope usecase = telemetry.startUsecase(taskType)) {
             try {
+                AiModelPort modelPort = resolveModelPort(taskType, providerId);
                 composedPrompt = promptService.compose(taskType);
                 String budgetedContext =
                         contextBudgetService.build(callerRequest.context(), settings.limits().maxInputCharacters());
@@ -97,7 +120,7 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
                 enforceCostBudget(resolved);
                 enforceInputGuardrail(resolved);
 
-                AiResponse response = invokeWithRetryAndTimeout(resolved);
+                AiResponse response = invokeWithRetryAndTimeout(resolved, modelPort);
 
                 enforceOutputGuardrail(resolved, response);
                 validateStructuredOutput(resolved, response);
@@ -109,7 +132,8 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
             } catch (AiException failure) {
                 long latencyMs = (System.nanoTime() - usecaseStart) / 1_000_000;
                 telemetry.recordOutcome(failureTelemetry(
-                        failure, taskType, composedPrompt, invocationId, latencyMs, callerRequest.correlationId()));
+                        failure, taskType, providerId, composedPrompt, invocationId, latencyMs,
+                        callerRequest.correlationId()));
                 throw failure;
             }
         }
@@ -180,12 +204,12 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
      * (transient), bounded by {@code settings.maxRetryAttempts()}; every other failure — including
      * a timeout — surfaces on the first attempt (contract {@code ai-model-port.md} C2, Q5/Q6).
      */
-    private AiResponse invokeWithRetryAndTimeout(AiRequest request) {
+    private AiResponse invokeWithRetryAndTimeout(AiRequest request, AiModelPort modelPort) {
         int attempt = 0;
         while (true) {
             attempt++;
             try (TelemetryScope invocation = telemetry.startInvocation()) {
-                return callWithTimeout(request);
+                return callWithTimeout(request, modelPort);
             } catch (AiProviderUnavailableException | AiProviderRateLimitedException transient_) {
                 if (attempt >= settings.maxRetryAttempts()) {
                     throw transient_;
@@ -195,7 +219,7 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
         }
     }
 
-    private AiResponse callWithTimeout(AiRequest request) {
+    private AiResponse callWithTimeout(AiRequest request, AiModelPort modelPort) {
         CompletableFuture<AiResponse> future = CompletableFuture.supplyAsync(() -> modelPort.generate(request));
         try {
             return future.get(settings.timeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -253,6 +277,7 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
     private InvocationTelemetry failureTelemetry(
             AiException failure,
             String taskType,
+            String providerId,
             PromptReference prompt,
             String invocationId,
             long latencyMs,
@@ -263,7 +288,7 @@ public class AiInvocationPolicy implements GenerateAiUseCase {
         String promptId = prompt != null ? prompt.promptId() : "unresolved";
         String promptVersion = prompt != null ? prompt.promptVersion() : "n/a";
         return new InvocationTelemetry(
-                settings.defaultProvider(),
+                providerId,
                 settings.defaultModel(),
                 taskType,
                 promptId,

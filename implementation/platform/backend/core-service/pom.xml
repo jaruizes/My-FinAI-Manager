@@ -294,6 +294,8 @@
                         <exclude>com/myfinaimanager/core/marketdata/infrastructure/frankfurter/dto/**</exclude>
                         <exclude>com/myfinaimanager/core/financialinstrument/infrastructure/finnhub/dto/**</exclude>
                         <exclude>com/myfinaimanager/core/financialinstrument/infrastructure/finnhub/config/**</exclude>
+                        <!-- FD005: same rationale for the portfolioanalysis module's JPA entities. -->
+                        <exclude>com/myfinaimanager/core/portfolioanalysis/infrastructure/persistence/entity/**</exclude>
                     </excludes>
                 </configuration>
             </plugin>

@@ -191,14 +191,25 @@ behind adapters.
 ## `ai` module (EN006 — provider-neutral AI model integration)
 
 A fourth functional module, ADR-003 layout — `domain/{model,ports,exceptions}`, `business`,
-`infrastructure/{provider/local,prompt,guardrails,tokencount,observability,api,config}`. Provides a
-**provider-neutral** capability for invoking AI/LLM models. EN006 ships **no live AI provider**
-(resolved Q1) — no API key, no vendor SDK, no business AI feature; it is horizontal infrastructure a
-future feature will consume.
+`infrastructure/{provider/{local,openai},prompt,guardrails,tokencount,observability,api,config}`.
+Provides a **provider-neutral** capability for invoking AI/LLM models. EN006 shipped with **no live
+AI provider** (resolved Q1) — FD005 is the first real consumer and added the first real provider
+adapter (below); the module remains horizontal infrastructure, no business AI logic of its own.
 
-- **`AiModelPort.generate(AiRequest) → AiResponse`** — the one generic port. Its **only**
-  implementation is `LocalAiModelAdapter`: deterministic, in-process, no network call, no
-  credential — proves the port and drives the observability chain below.
+- **`AiModelPort.generate(AiRequest) → AiResponse`** — the one generic port, now with **two**
+  named-bean implementations, resolved **per task** (FD005 research D1): `LocalAiModelAdapter`
+  (`@Component("local")` — deterministic, in-process, no network call, no credential; still the
+  default for every task) and `OpenAiModelAdapter` (`@Component("openai")` —
+  `infrastructure/provider/openai`: `OpenAiRestClient` (own `RestClient`, `Authorization: Bearer`
+  header, never a query parameter), `OpenAiChatMapper`, full error translation; blank
+  `OPENAI_API_KEY` → `AiProviderNotConfiguredException`, no outbound call). `AiInvocationPolicy`
+  resolves `providerId = ai.tasks.<task>.provider` (falling back to `ai.default-provider`) and picks
+  the matching bean from a Spring-injected `Map<String, AiModelPort>` — `ai.tasks.portfolio-analysis
+  .provider: openai` routes FD005's task there; EN006's own `diagnostic` task is unaffected.
+  `PromptService`/`PromptRepositoryPort` were extended the same release so a task's persisted
+  `promptId`/`promptVersion` identifies **its own** prompt, not the global one it's layered on
+  (`ClasspathPromptRepository` now serves `prompts/tasks/portfolio-analysis-v1.txt` alongside the
+  global system prompt).
 - **`AiInvocationPolicy`** (`business`, `implements GenerateAiUseCase`) — the single orchestrator:
   task validation → prompt composition (`PromptService` + `PromptRepositoryPort` →
   `ClasspathPromptRepository`, `src/main/resources/prompts/global-system-v1.txt`) → context
@@ -239,6 +250,54 @@ future feature will consume.
   Micrometer's `TestObservationRegistry`) plus one full-context `PlatformIntegrationIT` case proving
   real DI wiring end to end — none require network access or a live AI provider.
 
+## `portfolioanalysis` module (FD005 — AI Portfolio Analysis)
+
+A fifth functional module, ADR-003 layout — `domain/{model,ports,exceptions}`, `business`,
+`infrastructure/{persistence/{entity,repository,mapper},portfolio,ai,api/rest/{dto,mapper},config}`.
+Generates an AI-assisted analysis of a Portfolio from its FD004 valuation, via EN006.
+
+- **Lifecycle** — `PortfolioAnalysis` (`domain.model`): `PENDING → RUNNING → COMPLETED|FAILED`,
+  immutable per state snapshot (wither methods `withRunning`/`withCompleted`/`withFailed`); a
+  different analysis's row is never touched. `portfolioId` is a plain `UUID` — no `portfolio` type
+  reaches this module's domain (see AR-062 below).
+- **`PortfolioAnalysisRequestService`** (`implements RequestPortfolioAnalysisUseCase`) —
+  `requestAutomatic`/`requestManual` create the `PENDING` row, then hand off to
+  `PortfolioAnalysisWorker.runAsync` (a **different** Spring bean, so the `@Async` proxy applies —
+  self-invocation would otherwise bypass it). `requestManual` pre-checks for an open request, but
+  the **database** is the real guard: `portfolio_analysis_one_open_per_portfolio_uk`, a **partial
+  unique index** (`WHERE status IN ('PENDING','RUNNING')`) on `portfolio_id` — a constraint
+  violation on insert is translated to `AnalysisAlreadyInProgressException` (409).
+- **`PortfolioAnalysisWorker`** (`@Async("portfolioAnalysisExecutor")`) — the whole body is a
+  last-resort `catch (Throwable)` (never stuck `RUNNING`): fetch the Portfolio context → build the
+  deterministic prompt text (`PortfolioAnalysisContextBuilder`, a pure calculator — no port, no
+  network) → if insufficient (no valued position, or the valuation never completed), `FAILED
+  (INSUFFICIENT_DATA)` with **zero** AI calls → otherwise call the AI port → terminal state.
+  `PortfolioAnalysisAsyncConfiguration` provides the dedicated `ThreadPoolTaskExecutor` (small,
+  planning-level sizing — distinct from the HTTP request pool, so a slow analysis never starves
+  Portfolio creation/read traffic).
+- **Two ACL adapters, each the sole importer of one other module (AR-062):**
+  - `infrastructure.portfolio.PortfolioContextGatewayAdapter` — calls
+    `portfolio.business.{PortfolioQueryUseCase,PortfolioValuationQueryUseCase}`; translates FD004's
+    `Portfolio`/`PortfolioValuation`/`PositionValuation`/`SectorAllocation` into this module's own
+    `PortfolioContextSnapshot`. Also the sole home of `PortfolioAnalysisOnCreationListener`
+    (`@EventListener(PortfolioCreatedEvent)` — reuses FD004's own creation event; a second,
+    independent listener) — it must import `portfolio.domain.events.PortfolioCreatedEvent`, so it
+    lives here rather than in `business`.
+  - `infrastructure.ai.PortfolioAnalysisAiAdapter` — calls `ai.business.GenerateAiUseCase.generate`
+    exactly once (task `portfolio-analysis`, a fixed structured-output schema); maps every
+    `AiException` subtype to a normalized `FailureReason` (never a raw provider message).
+- **Persistence** — Flyway `V5__portfolio_analysis.sql`: `portfolio_analysis` /
+  `portfolio_analysis_insight` / `portfolio_analysis_risk`. No FK into any FD004 table — a snapshot
+  is read transiently at generation time, never pinned by a persisted reference (FD004's own
+  valuation snapshot is mutable/replaced-in-place).
+- **REST** — `GET /api/portfolios/{portfolioId}/analysis/latest` (status `NONE`/`PENDING`/
+  `RUNNING`/`COMPLETED`/`FAILED`) and `POST /api/portfolios/{portfolioId}/analysis` (`202` +
+  `RequestedPortfolioAnalysisResponse`; `409` on a duplicate open request). Neither response ever
+  serializes `provider`/`model`/`promptId`/`promptVersion`/token/cost — that metadata stays in the
+  row and in EN006 telemetry only. `PortfolioAnalysisExceptionHandler` is its own
+  `@RestControllerAdvice` (scoped to `PortfolioAnalysisController`) rather than widening
+  `portfolio`'s own handler — that would make `portfolio` depend on `portfolioanalysis`, backwards.
+
 ### Consumed by `portfolio` for FD002 (AR-062)
 
 The `portfolio` module validates that every Position on `POST /api/portfolios` references an active
@@ -256,11 +315,13 @@ portfolio.business.CreatePortfolioService
 ```
 
 `portfolio.domain` / `portfolio.business` never see a `financialinstrument` type; the currency
-match is completed in the adapter. Enforced by `StandardArchitectureRulesTest` (**18 rules** since
-EN005): `portfolio` may reference only `..financialinstrument.domain.ports..` / `..domain.model..`,
-only from `portfolio.infrastructure`; and Finnhub `dto` / `client` / `RestClient` / HTTP / Jackson
-types are confined to `..marketdata.infrastructure.finnhub..` (the `marketdata` domain is free of
-them, and `marketdata` depends on no other business module).
+match is completed in the adapter. Enforced by `StandardArchitectureRulesTest` (**27 rules** as of
+FD005): `portfolio` may reference only `..financialinstrument.domain.ports..` / `..domain.model..`,
+only from `portfolio.infrastructure`; Finnhub/Frankfurter/OpenAI `dto` / `client` / `RestClient` /
+HTTP / Jackson types are confined to their own provider package (the owning module's domain stays
+free of them, and no business module depends on another via anything but its published ports); and
+`portfolioanalysis` reads `portfolio` and `ai` each through exactly one dedicated adapter package,
+mirroring the `portfolio`↔`marketdata` confinement pair exactly.
 
 ## Tests
 

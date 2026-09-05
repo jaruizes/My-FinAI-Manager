@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ class RuleBasedInputGuardrailTest {
 
     private static final AiInvocationSettings SETTINGS = new AiInvocationSettings(
             "local", "local-deterministic-v1", new TokenLimits(1000, 100, 1100, 50),
-            BigDecimal.TEN, Duration.ofSeconds(5), 2, Duration.ofMillis(10));
+            BigDecimal.TEN, Duration.ofSeconds(5), 2, Duration.ofMillis(10), Map.of());
 
     private final RuleBasedInputGuardrail guardrail = new RuleBasedInputGuardrail(SETTINGS);
 

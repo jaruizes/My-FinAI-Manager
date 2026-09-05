@@ -16,9 +16,11 @@ import com.myfinaimanager.core.ai.domain.ports.PromptRepositoryPort;
 
 /**
  * Loads governed prompts from {@code src/main/resources/prompts/} (enabler §31; research D-plan
- * OD-8/AI). EN006 registers no business task beyond {@code "diagnostic"} (its own internal
- * observability-verification task, FR-054) — a future AI feature registers its own task ids and
- * instructions here or via an equivalent adapter, without changing {@code PromptService}.
+ * OD-8/AI). Registers two tasks: EN006's own internal {@code "diagnostic"} (no dedicated
+ * instructions — FR-054) and FD005's {@code "portfolio-analysis"} (dedicated instructions,
+ * {@code prompts/tasks/portfolio-analysis-v1.txt}, its own {@code promptId}/{@code promptVersion}
+ * — FD005 research D2). A future AI feature registers its own task the same way, without changing
+ * {@code PromptService}.
  */
 @Component
 public class ClasspathPromptRepository implements PromptRepositoryPort {
@@ -27,15 +29,25 @@ public class ClasspathPromptRepository implements PromptRepositoryPort {
     private static final String GLOBAL_PROMPT_VERSION = "v1";
     private static final String GLOBAL_PROMPT_RESOURCE = "prompts/global-system-v1.txt";
 
+    private static final String PORTFOLIO_ANALYSIS_TASK = "portfolio-analysis";
+    private static final String PORTFOLIO_ANALYSIS_PROMPT_VERSION = "v1";
+    private static final String PORTFOLIO_ANALYSIS_RESOURCE = "prompts/tasks/portfolio-analysis-v1.txt";
+
     /** Known tasks and their (optional) task-specific instructions layered under the global prompt. */
-    private static final Set<String> KNOWN_TASKS = Set.of("diagnostic");
-    private static final Map<String, String> TASK_INSTRUCTIONS = Map.of();
+    private static final Set<String> KNOWN_TASKS = Set.of("diagnostic", PORTFOLIO_ANALYSIS_TASK);
 
     private final PromptReference globalSystemPrompt;
+    private final Map<String, PromptReference> taskInstructions;
 
     public ClasspathPromptRepository() {
         this.globalSystemPrompt =
                 new PromptReference(GLOBAL_PROMPT_ID, GLOBAL_PROMPT_VERSION, readResource(GLOBAL_PROMPT_RESOURCE));
+        this.taskInstructions = Map.of(
+                PORTFOLIO_ANALYSIS_TASK,
+                new PromptReference(
+                        PORTFOLIO_ANALYSIS_TASK,
+                        PORTFOLIO_ANALYSIS_PROMPT_VERSION,
+                        readResource(PORTFOLIO_ANALYSIS_RESOURCE)));
     }
 
     @Override
@@ -44,8 +56,8 @@ public class ClasspathPromptRepository implements PromptRepositoryPort {
     }
 
     @Override
-    public Optional<String> findTaskInstructions(String taskType) {
-        return Optional.ofNullable(TASK_INSTRUCTIONS.get(taskType));
+    public Optional<PromptReference> findTaskInstructions(String taskType) {
+        return Optional.ofNullable(taskInstructions.get(taskType));
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.myfinaimanager.core.ai.infrastructure.config;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -16,6 +17,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param limits          token/character budget ceilings
  * @param timeout         connect/read timeouts around one provider call
  * @param retry           bounded-retry policy for transient failures
+ * @param tasks           per-task provider overrides (FD005 research D1), keyed by task type; a
+ *                        task absent from this map resolves to {@code defaultProvider}
  */
 @ConfigurationProperties("ai")
 public record AiProperties(
@@ -23,7 +26,12 @@ public record AiProperties(
         String defaultModel,
         Limits limits,
         Timeout timeout,
-        Retry retry) {
+        Retry retry,
+        Map<String, TaskOverride> tasks) {
+
+    public AiProperties {
+        tasks = tasks == null ? Map.of() : Map.copyOf(tasks);
+    }
 
     public record Limits(
             int maxInputTokens,
@@ -37,5 +45,9 @@ public record AiProperties(
     }
 
     public record Retry(int maxAttempts, Duration backoff) {
+    }
+
+    /** @param provider the provider id to use for this task, overriding {@code defaultProvider} */
+    public record TaskOverride(String provider) {
     }
 }

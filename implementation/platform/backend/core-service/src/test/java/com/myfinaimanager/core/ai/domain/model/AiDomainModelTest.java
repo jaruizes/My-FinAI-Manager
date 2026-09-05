@@ -340,77 +340,77 @@ class AiDomainModelTest {
     @Test
     void aiInvocationSettings_rejects_blank_defaultProvider() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        " ", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ZERO))
+                        " ", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_blank_defaultModel() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", " ", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ZERO))
+                        "local", " ", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_null_limits() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", null, BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ZERO))
+                        "local", "m", null, BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_null_maxEstimatedCost() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), null, Duration.ofSeconds(1), 1, Duration.ZERO))
+                        "local", "m", validLimits(), null, Duration.ofSeconds(1), 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_negative_maxEstimatedCost() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), new BigDecimal("-1"), Duration.ofSeconds(1), 1, Duration.ZERO))
+                        "local", "m", validLimits(), new BigDecimal("-1"), Duration.ofSeconds(1), 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_null_timeout() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), BigDecimal.ZERO, null, 1, Duration.ZERO))
+                        "local", "m", validLimits(), BigDecimal.ZERO, null, 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_negative_timeout() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(-1), 1, Duration.ZERO))
+                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(-1), 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_non_positive_timeout() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ZERO, 1, Duration.ZERO))
+                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ZERO, 1, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_non_positive_maxRetryAttempts() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 0, Duration.ZERO))
+                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 0, Duration.ZERO, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_null_retryBackoff() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, null))
+                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, null, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void aiInvocationSettings_rejects_negative_retryBackoff() {
         assertThatThrownBy(() -> new AiInvocationSettings(
-                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ofMillis(-1)))
+                        "local", "m", validLimits(), BigDecimal.ZERO, Duration.ofSeconds(1), 1, Duration.ofMillis(-1), Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

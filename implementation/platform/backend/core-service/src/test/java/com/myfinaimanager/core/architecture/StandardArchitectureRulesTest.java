@@ -140,12 +140,14 @@ class StandardArchitectureRulesTest {
                             "com.fasterxml.jackson..",
                             "java.net.http..");
 
-    // EN005 Revision 2: RestClient is confined to the provider client packages (Finnhub price +
-    // Frankfurter FX in marketdata; Finnhub profile in financialinstrument).
+    // EN005 Revision 2 + FD005 research D3: RestClient is confined to the provider client packages
+    // (Finnhub price + Frankfurter FX in marketdata; Finnhub profile in financialinstrument; OpenAI
+    // chat completion in ai).
     @ArchTest
     static final ArchRule only_provider_client_packages_use_restclient =
             noClasses().that().resideOutsideOfPackage("..infrastructure..finnhub.client..")
                     .and().resideOutsideOfPackage("..infrastructure..frankfurter.client..")
+                    .and().resideOutsideOfPackage("..infrastructure..openai.client..")
                     .should().dependOnClassesThat().resideInAnyPackage("org.springframework.web.client..");
 
     @ArchTest
@@ -194,4 +196,31 @@ class StandardArchitectureRulesTest {
     static final ArchRule ai_domain_and_business_are_free_of_infrastructure_provider_types =
             noClasses().that().resideInAnyPackage("..core.ai.domain..", "..core.ai.business..")
                     .should().dependOnClassesThat().resideInAPackage("..core.ai.infrastructure..");
+
+    // FD005 US6 / AR-062: portfolioanalysis reads portfolio and ai each through exactly one
+    // dedicated adapter package — mirrors the portfolio<->marketdata confinement pair exactly.
+
+    @ArchTest
+    static final ArchRule portfolioanalysis_core_is_free_of_portfolio =
+            noClasses().that().resideInAnyPackage(
+                            "..core.portfolioanalysis.domain..", "..core.portfolioanalysis.business..")
+                    .should().dependOnClassesThat().resideInAPackage("..core.portfolio..");
+
+    @ArchTest
+    static final ArchRule portfolio_is_accessed_only_from_the_portfolioanalysis_portfolio_adapter =
+            noClasses().that().resideInAPackage("..core.portfolioanalysis..")
+                    .and().resideOutsideOfPackage("..core.portfolioanalysis.infrastructure.portfolio..")
+                    .should().dependOnClassesThat().resideInAPackage("..core.portfolio..");
+
+    @ArchTest
+    static final ArchRule portfolioanalysis_core_is_free_of_ai =
+            noClasses().that().resideInAnyPackage(
+                            "..core.portfolioanalysis.domain..", "..core.portfolioanalysis.business..")
+                    .should().dependOnClassesThat().resideInAPackage("..core.ai..");
+
+    @ArchTest
+    static final ArchRule ai_is_accessed_only_from_the_portfolioanalysis_ai_adapter =
+            noClasses().that().resideInAPackage("..core.portfolioanalysis..")
+                    .and().resideOutsideOfPackage("..core.portfolioanalysis.infrastructure.ai..")
+                    .should().dependOnClassesThat().resideInAPackage("..core.ai..");
 }
