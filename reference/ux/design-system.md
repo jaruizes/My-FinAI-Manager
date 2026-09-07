@@ -1,8 +1,8 @@
-# My-FinAI-Manager — Design System
+# Design System
 
 ## Purpose
 
-This document defines the global visual language and UX direction of My-FinAI-Manager.
+This document defines the global visual language and UX direction.
 
 It establishes reusable principles for:
 
@@ -28,7 +28,7 @@ Visual prototypes and screenshots are references for intended direction and inte
 
 # Visual Direction
 
-My-FinAI-Manager should use a modern dark financial-dashboard visual style.
+The UI should use a modern dark financial-dashboard visual style.
 
 The interface should feel:
 
@@ -160,7 +160,7 @@ The theme should preserve enough tonal separation between:
 
 # Cards
 
-Cards are a primary information container in My-FinAI-Manager.
+Cards are a primary information container in the application.
 
 Cards should:
 
@@ -868,7 +868,7 @@ Visual design must not override approved business behavior.
 
 # Reference Style Summary
 
-The desired My-FinAI-Manager visual style is:
+The desired visual style is:
 
 ```text
 Modern

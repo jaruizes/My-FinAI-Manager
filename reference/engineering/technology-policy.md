@@ -1,8 +1,8 @@
-# My-FinAI-Manager — Technology Policy
+# Technology Policy
 
 ## Purpose
 
-This document defines the **approved technology stack and technology guardrails** for My-FinAI-Manager.
+This document defines the **approved technology stack and technology guardrails**.
 
 Its purpose is to constrain implementation choices made by humans, AI agents, or SDD frameworks.
 

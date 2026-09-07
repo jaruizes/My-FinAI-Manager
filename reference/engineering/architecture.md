@@ -409,7 +409,7 @@ The platform should distinguish between external and internal interfaces.
 
 ## Business API
 
-The external API is the stable entry point to My-FinAI-Manager.
+The business API is the stable entry point to the platform.
 
 It should:
 
@@ -634,7 +634,6 @@ Company
 Risk
 ```
 
-Neo4j must not be introduced merely because My-FinAI-Manager contains semantic concepts.
 
 Its use should be justified by a concrete capability.
 

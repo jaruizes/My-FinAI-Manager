@@ -1,8 +1,8 @@
-# My-FinAI-Manager — Delivery Policy
+# Delivery Policy
 
 ## Purpose
 
-This document defines the delivery governance model for My-FinAI-Manager.
+This document defines the delivery governance model.
 
 Its goal is to ensure that software implementation remains faithful to **human-defined intent**, that the implementation is objectively verified before human review, and that final acceptance of a Feature or Enabler remains a human responsibility.
 

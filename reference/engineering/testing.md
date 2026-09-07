@@ -1,8 +1,8 @@
-# My-FinAI-Manager — Testing
+# Testing
 
 ## Purpose
 
-This document defines the **testing approach** for My-FinAI-Manager.
+This document defines the **testing approach**.
 
 Its purpose is to describe how implementation correctness and integration behavior should be verified across the platform.
 
