@@ -1,7 +1,0 @@
-# Keep the Playwright build context small (EN002).
-node_modules/
-test-results/
-.git
-*.log
-Dockerfile
-.dockerignore
