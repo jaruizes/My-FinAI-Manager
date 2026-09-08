@@ -46,8 +46,16 @@ data/local/
 *.pem
 *.key
 
-# Claude
-.claude/
+# Claude local instructions
+CLAUDE.local.md
 
+# Claude local files
+.claude/*
+
+# Claude skills are part of the repository
+!.claude/skills/
+!.claude/skills/**
+
+.claude/skills/openspec-*
 # Logs
 *.log
