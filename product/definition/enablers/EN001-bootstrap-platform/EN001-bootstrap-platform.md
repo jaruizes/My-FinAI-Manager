@@ -1,6 +1,6 @@
 # EN001 — Establish Executable Platform Foundation
 
-> **Status:** Draft  
+> **Status:** Ready  
 > **ID:** EN001  
 > **Type:** Enabler  
 > **Name:** Establish Executable Platform Foundation  

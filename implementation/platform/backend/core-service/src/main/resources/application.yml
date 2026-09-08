@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: core-service
+  datasource:
+    # Externalised: overridden by SPRING_DATASOURCE_* env vars in every runtime.
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/myfinaimanager}
+    username: ${SPRING_DATASOURCE_USERNAME:myfinaimanager}
+    password: ${SPRING_DATASOURCE_PASSWORD:myfinaimanager}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    version: openapi_3_0
+  packages-to-scan: com.myfinaimanager.core
+
+# OpenTelemetry is configured entirely through OTEL_* environment variables
+# consumed by the OpenTelemetry Java agent attached in the container image.
+# No OTLP endpoint is hard-coded here; when the agent/vars are absent the
+# application still runs and simply exports nothing.

@@ -1,0 +1,28 @@
+<main class="home">
+  <section class="card" aria-labelledby="app-identity">
+    <p class="eyebrow">Platform</p>
+    <h1 id="app-identity" class="app-name">My-FinAI-Manager</h1>
+    <p class="tagline">Executable platform foundation</p>
+
+    <div class="version" aria-live="polite">
+      @switch (state().status) {
+        @case ('loading') {
+          <span class="version__label">Platform version</span>
+          <span class="version__value version__value--loading" data-testid="version-loading">
+            Loading…
+          </span>
+        }
+        @case ('success') {
+          <span class="version__label">Platform version</span>
+          <span class="version__value" data-testid="version">{{ version() }}</span>
+        }
+        @case ('error') {
+          <span class="version__label">Platform version</span>
+          <span class="version__value version__value--error" role="alert" data-testid="version-error">
+            Unable to load the platform version. Please try again later.
+          </span>
+        }
+      }
+    </div>
+  </section>
+</main>

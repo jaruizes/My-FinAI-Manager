@@ -17,9 +17,11 @@ dist/
 .angular/
 out-tsc/
 
-# Containerized E2E (implementation/platform/e2e.sh) — diagnostics, never committed (EN002)
+# Containerized E2E (implementation/platform/e2e.sh) — diagnostics, never committed (EN001)
 implementation/platform/e2e/test-results/
 implementation/platform/e2e/node_modules/
+implementation/platform/e2e/playwright-report/
+implementation/platform/e2e/blob-report/
 
 # Environment
 .env
@@ -44,8 +46,16 @@ data/local/
 *.pem
 *.key
 
-# Claude
-.claude/
+# Claude local instructions
+CLAUDE.local.md
 
+# Claude local files
+.claude/*
+
+# Claude skills are part of the repository
+!.claude/skills/
+!.claude/skills/**
+
+.claude/skills/openspec-*
 # Logs
 *.log
