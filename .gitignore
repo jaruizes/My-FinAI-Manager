@@ -46,8 +46,13 @@ data/local/
 *.pem
 *.key
 
-# Claude
-.claude/
+# Claude local/generated state
+# Ignore .claude by default, but keep the project-owned Solution Validator skill tracked.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/solution-validator/
+!.claude/skills/solution-validator/**
 
 # Logs
 *.log
