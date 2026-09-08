@@ -1,0 +1,12 @@
+{
+  "name": "platform-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Containerized Playwright browser E2E for the My-FinAI-Manager platform (EN001)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}

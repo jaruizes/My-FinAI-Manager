@@ -1,0 +1,70 @@
+.home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--spacing-xl);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+}
+
+.eyebrow {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.app-name {
+  margin: 0;
+  font-size: var(--font-size-page-title);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.tagline {
+  margin: var(--spacing-xs) 0 var(--spacing-lg);
+  color: var(--color-text-secondary);
+}
+
+.version {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding-top: var(--spacing-lg);
+  border-top: var(--border-default);
+}
+
+.version__label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.version__value {
+  font-size: var(--font-size-financial-value);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.version__value--loading {
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-secondary);
+}
+
+.version__value--error {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-negative);
+}

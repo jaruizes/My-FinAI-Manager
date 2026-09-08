@@ -547,6 +547,16 @@ The current human-governed repository baseline is organized as:
 │   └── ux/
 │       └── design-system.md
 │
+├── implementation/
+│   └── platform/                 executable platform (EN001)
+│       ├── backend/core-service/  Spring Boot service
+│       ├── frontend/web/          Angular application
+│       ├── contracts/             platform OpenAPI contract
+│       ├── infrastructure/        Docker Compose runtime + observability
+│       ├── e2e/                   containerized Playwright browser E2E
+│       ├── start.sh / stop.sh / e2e.sh
+│       └── README.md
+│
 └── README.md
 ```
 
@@ -566,7 +576,7 @@ implementation
 → executable realization
 ```
 
-When executable product code is present, the architecture defines `implementation/platform/` as the cumulative implementation boundary.
+When executable product code is present, the architecture defines `implementation/platform/` as the cumulative implementation boundary. The executable platform foundation delivered by **EN001** now lives there — see [`implementation/platform/README.md`](implementation/platform/README.md) for how to run and verify it (`./implementation/platform/start.sh`).
 
 ---
 
@@ -622,7 +632,7 @@ Architecture should enable future evolution without predicting every future requ
 
 🚧 **Experimental project — under active development**
 
-This branch focuses on the human-governed product definition, reusable reference guardrails, and delivery methodology that will govern subsequent executable implementation.
+This branch carries the human-governed product definition, the reusable reference guardrails, the delivery methodology, and the first executable slice: the **EN001** platform foundation under `implementation/platform/` (Angular + Spring Boot + PostgreSQL + containerized observability, proven end to end by a containerized Playwright test).
 
 The project intentionally treats implementation tooling — including SDD frameworks and AI coding agents — as replaceable.
 

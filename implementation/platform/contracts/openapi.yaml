@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: My-FinAI-Manager Platform API
+  description: >-
+    External business API of the My-FinAI-Manager platform.
+
+    EN001 establishes the platform foundation and introduces a single bootstrap
+    operation, `GET /api/v1/hello`, whose only purpose is to prove the
+    `frontend -> backend -> PostgreSQL` path by returning the persisted platform
+    version. No product capability is exposed yet.
+  version: 0.1.0
+servers:
+  - url: /
+    description: Same-origin (the frontend reverse-proxies /api to the backend)
+tags:
+  - name: platform
+    description: Technical platform bootstrap and metadata
+paths:
+  /api/v1/hello:
+    get:
+      operationId: getHello
+      summary: Return the persisted platform version
+      description: >-
+        Reads the current application/platform version from PostgreSQL and
+        returns it. The version is never fabricated: when it cannot be read the
+        operation fails with `503` and a stable error code (EN001 BR-001, AC-008).
+      tags:
+        - platform
+      responses:
+        '200':
+          description: The platform version was read from persistence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelloResponse'
+              example:
+                version: 0.1.0
+        '503':
+          description: >-
+            The platform version could not be retrieved from persistence. No
+            version is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: PLATFORM_VERSION_UNAVAILABLE
+components:
+  schemas:
+    HelloResponse:
+      type: object
+      required:
+        - version
+      properties:
+        version:
+          type: string
+          minLength: 1
+          description: The application/platform version persisted in PostgreSQL.
+          example: 0.1.0
+      additionalProperties: false
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Stable machine-readable error identifier.
+          enum:
+            - PLATFORM_VERSION_UNAVAILABLE
+      additionalProperties: false

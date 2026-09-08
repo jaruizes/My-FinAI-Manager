@@ -1,0 +1,18 @@
+schema: spec-driven
+
+context: |
+  My-FinAI-Manager follows a human-governed delivery model.
+
+  Human-approved Feature Definitions and Enabler Definitions under
+  product/definition/ are authoritative.
+
+  OpenSpec artifacts are derived artifacts and must never redefine
+  human-approved intent.
+
+  Before generating specifications, plans or tasks:
+  - read CLAUDE.md
+  - read the referenced FD/EN under product/definition/features or product/definition/enablers
+  - read applicable documents under reference/
+
+  If material intent is ambiguous or missing, request human clarification.
+  Do not invent requirements.
